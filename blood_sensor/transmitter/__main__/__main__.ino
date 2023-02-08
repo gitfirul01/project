@@ -7,13 +7,6 @@
 #include "MAX30102.h"
 #include "Pulse.h"
 
-#define SCREEN_ADDRESS 0x3C
-#define SPHYGMO_ADDRESS 0x50
-
-#define send_btn 2
-#define act_btn 3
-#define BEAT_LED LED_BUILTIN
-
 #ifndef cbi
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
 #endif
@@ -21,8 +14,12 @@
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
-#define LED LED_BUILTIN
-#define BUTTON 3
+#define SCREEN_ADDRESS 0x3C
+#define SPHYGMO_ADDRESS 0x50
+
+#define send_btn 2
+#define act_btn 3
+#define BEAT_LED LED_BUILTIN
 #define OPTIONS 7
 
 //spo2_table is approximated as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
@@ -62,13 +59,12 @@ MAFilter bpm;
 
 void setup() {
   Serial.begin(115200);
-
-  pinMode(LED, OUTPUT);
-  // pinMode(BUTTON, INPUT);
+  pinMode(BEAT_LED, OUTPUT);
 
   filter_for_graph = EEPROM.read(OPTIONS);
   draw_Red = EEPROM.read(OPTIONS + 1);
-  //
+
+  /* begin SSD1306 */
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
     while (1)
@@ -81,7 +77,8 @@ void setup() {
   display.println("Welcome");
   display.display();
   delay(2000);
-  //
+
+  /* begin MAX30102 */
   if (!sensor.begin()) {
     state = 0;
     while (1)
@@ -89,22 +86,25 @@ void setup() {
   } else state = 3;
   sensor.setup();
 
-  attachInterrupt(digitalPinToInterrupt(BUTTON), button, FALLING);
+  attachInterrupt(digitalPinToInterrupt(act_btn), action_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(send_btn), send_isr, FALLING);
 }
 
 
 void loop() {
+  /* MAX30102 routine */
   sensor.check();
-  long now = millis();  //start time of this cycle
+  long now = millis();
+
   if (!sensor.available()) return;
+
   uint32_t irValue = sensor.getIR();
   uint32_t redValue = sensor.getRed();
   sensor.nextSample();
+
   if (irValue < 5000) {
-    // voltage = getVCC();
-    // checkbutton();
     state = (sleep_counter <= 50 ? 1 : 4);  // finger not down message
-    delay(200);
+    delay(100);
     ++sleep_counter;
     if (sleep_counter > 100) {
       go_sleep();
@@ -130,7 +130,7 @@ void loop() {
       long btpm = 60000 / (now - lastBeat);
       if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
       lastBeat = now;
-      digitalWrite(LED, HIGH);
+      digitalWrite(BEAT_LED, HIGH);
       led_on = true;
       // compute SpO2 ratio
       long numerator = (pulseRed.avgAC() * pulseIR.avgDC()) / 256;
@@ -143,13 +143,13 @@ void loop() {
         SPO2 = pgm_read_byte_near(&spo2_table[RX100]);
     }
   }
-  // flash led for 25 ms
+  // flash led on beat for 25 ms
   if (led_on && (now - lastBeat) > 25) {
-    digitalWrite(LED, LOW);
+    digitalWrite(BEAT_LED, LOW);
     led_on = false;
   }
 
-
+  /* SSD1306 routine */
   nowTime = millis();
   if (nowTime - lastTime > 300) {
     display.clearDisplay();
@@ -198,11 +198,13 @@ void loop() {
 
 
 
-void button() {
-  state++;
-  if (state > 4) state = 1;
+void action_isr() {
+  // state++;
+  // if (state > 4) state = 1;
 }
 
+void send_isr() {
+}
 
 void go_sleep() {
   display.clearDisplay();
@@ -216,7 +218,7 @@ void go_sleep() {
   pinMode(0, INPUT);
   pinMode(2, INPUT);
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_mode();  // sleep until button press
+  sleep_mode();  // sleep until act_button press
   // cause reset
   setup();
 }
