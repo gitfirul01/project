@@ -1,11 +1,13 @@
 /*
 *  MAX30102 driver - uses a combination of ideas from the Maxim & Sparkfun drivers
-*                    used Technolbogy's Wire 
+*                    used Technolbogy's TinyI2C 
 *
 * j.n.magee 15-10-2019
 */
+#include <SoftwareI2C.h>
+SoftwareI2C wire1;
 
-#include "Wire.h"
+// #include "Wire.h"
 #include "MAX30102.h"
 
 
@@ -16,6 +18,7 @@ MAX30102::MAX30102() {
 }
 
 boolean MAX30102::begin(uint8_t i2caddr) {
+  wire1.begin(A0, A1);
   _i2caddr = i2caddr;
   if (readRegister8(REG_PART_ID) != MAX_30102_ID)  return false; 
   return true;
@@ -70,11 +73,11 @@ uint16_t MAX30102::check(void) {
     numberOfSamples = writePointer - readPointer;
     if (numberOfSamples < 0) numberOfSamples += 32; //Wrap condition
     int bytesLeftToRead = numberOfSamples * 6; //3 bytes each for Red and IR    
-    Wire.beginTransmission(_i2caddr);
-    Wire.write(REG_FIFO_DATA);
-    Wire.endTransmission();
+    wire1.beginTransmission(_i2caddr);
+    wire1.write(REG_FIFO_DATA);
+    wire1.endTransmission();
     bytesLeftToRead = bytesLeftToRead<=32? bytesLeftToRead : 32;
-    Wire.requestFrom(_i2caddr, bytesLeftToRead);      
+    wire1.requestFrom(_i2caddr, bytesLeftToRead);      
     while (bytesLeftToRead > 0) {
         sense.head++; //Advance the head of the storage struct
         sense.head %= STORAGE_SIZE; //Wrap condition
@@ -83,7 +86,7 @@ uint16_t MAX30102::check(void) {
 		    sense.red[sense.head] = readFIFOSample();
         bytesLeftToRead -= 6;
     }
-    Wire.endTransmission();
+    wire1.endTransmission();
   } 
   return (numberOfSamples);
 }
@@ -93,12 +96,12 @@ uint16_t MAX30102::check(void) {
 //
 uint8_t MAX30102::readRegister8(uint8_t reg) {
     uint8_t value;
-    Wire.beginTransmission(_i2caddr);
-    Wire.write((uint8_t)reg);
-    Wire.endTransmission();
-    Wire.requestFrom(_i2caddr, (byte)1);
-    value = Wire.read();
-    Wire.endTransmission();
+    wire1.beginTransmission(_i2caddr);
+    wire1.write((uint8_t)reg);
+    wire1.endTransmission();
+    wire1.requestFrom(_i2caddr, (byte)1);
+    value = wire1.read();
+    wire1.endTransmission();
     return value;
 }
 
@@ -106,16 +109,16 @@ uint32_t MAX30102::readFIFOSample() {
     byte temp[4]; 
     uint32_t temp32;
     temp[3] = 0;
-    temp[2] = Wire.read();
-    temp[1] = Wire.read();
-    temp[0] = Wire.read();
+    temp[2] = wire1.read();
+    temp[1] = wire1.read();
+    temp[0] = wire1.read();
     memcpy(&temp32, temp, 4);	
     return temp32 & 0x3FFFF;	
 }
 
 void MAX30102::writeRegister8(uint8_t reg, uint8_t value) {
-  Wire.beginTransmission(_i2caddr);
-  Wire.write(reg);
-  Wire.write(value);
-  Wire.endTransmission();
+  wire1.beginTransmission(_i2caddr);
+  wire1.write(reg);
+  wire1.write(value);
+  wire1.endTransmission();
 }
