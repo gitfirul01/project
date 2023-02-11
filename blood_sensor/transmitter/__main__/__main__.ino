@@ -1,4 +1,5 @@
 #include <Wire.h>
+#include <SoftwareSerial.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <EEPROM.h>
@@ -22,6 +23,10 @@
 #define BEAT_LED LED_BUILTIN
 #define OPTIONS 7
 
+#define device1_number "+6281328431180"
+#define device2_number "+6281328431160"
+#define doctor_number "+62xxxxxxxxxx"
+
 //spo2_table is approximated as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
 const uint8_t spo2_table[184] PROGMEM = { 95, 95, 95, 96, 96, 96, 97, 97, 97, 97, 97, 98, 98, 98, 98, 98, 99, 99, 99, 99,
                                           99, 99, 99, 99, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100,
@@ -33,6 +38,41 @@ const uint8_t spo2_table[184] PROGMEM = { 95, 95, 95, 96, 96, 96, 97, 97, 97, 97
                                           49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 31, 30, 29,
                                           28, 27, 26, 25, 23, 22, 21, 20, 19, 17, 16, 15, 14, 12, 11, 10, 9, 7, 6, 5,
                                           3, 2, 1 };
+
+static const unsigned char PROGMEM logo2_bmp[] = {
+  0x03, 0xC0, 0xF0, 0x06, 0x71, 0x8C, 0x0C, 0x1B,
+  0x06, 0x18, 0x0E, 0x02, 0x10, 0x0C, 0x03, 0x10,
+  0x04, 0x01, 0x10, 0x04, 0x01, 0x10, 0x40, 0x01,
+  0x10, 0x40, 0x01, 0x10, 0xC0, 0x03, 0x08, 0x88,
+  0x02, 0x08, 0xB8, 0x04, 0xFF, 0x37, 0x08, 0x01,
+  0x30, 0x18, 0x01, 0x90, 0x30, 0x00, 0xC0, 0x60,
+  0x00, 0x60, 0xC0, 0x00, 0x31, 0x80, 0x00, 0x1B,
+  0x00, 0x00, 0x0E, 0x00, 0x00, 0x04, 0x00
+};
+
+static const unsigned char PROGMEM logo3_bmp[] = {
+  0x01, 0xF0, 0x0F, 0x80, 0x06, 0x1C, 0x38, 0x60, 0x18, 0x06, 0x60, 0x18, 0x10, 0x01, 0x80, 0x08,
+  0x20, 0x01, 0x80, 0x04, 0x40, 0x00, 0x00, 0x02, 0x40, 0x00, 0x00, 0x02, 0xC0, 0x00, 0x08, 0x03,
+  0x80, 0x00, 0x08, 0x01, 0x80, 0x00, 0x18, 0x01, 0x80, 0x00, 0x1C, 0x01, 0x80, 0x00, 0x14, 0x00,
+  0x80, 0x00, 0x14, 0x00, 0x80, 0x00, 0x14, 0x00, 0x40, 0x10, 0x12, 0x00, 0x40, 0x10, 0x12, 0x00,
+  0x7E, 0x1F, 0x23, 0xFE, 0x03, 0x31, 0xA0, 0x04, 0x01, 0xA0, 0xA0, 0x0C, 0x00, 0xA0, 0xA0, 0x08,
+  0x00, 0x60, 0xE0, 0x10, 0x00, 0x20, 0x60, 0x20, 0x06, 0x00, 0x40, 0x60, 0x03, 0x00, 0x40, 0xC0,
+  0x01, 0x80, 0x01, 0x80, 0x00, 0xC0, 0x03, 0x00, 0x00, 0x60, 0x06, 0x00, 0x00, 0x30, 0x0C, 0x00,
+  0x00, 0x08, 0x10, 0x00, 0x00, 0x06, 0x60, 0x00, 0x00, 0x03, 0xC0, 0x00, 0x00, 0x01, 0x80, 0x00
+};
+
+typedef struct data_ {
+  int sys;
+  int dias;
+};
+typedef union packet_ {
+  data_ value;
+  byte byteArray[sizeof(data_)];
+};
+packet_ sphygmo;
+
+int idx = 0;
+bool data_available;
 
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
@@ -51,6 +91,8 @@ uint8_t istate = 0;
 uint8_t sleep_counter = 0;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
+SoftwareSerial _tensimeter(10, 11);
+// SoftwareSerial _gsm(8, 9);
 MAX30102 sensor;
 Pulse pulseIR;
 Pulse pulseRed;
@@ -59,6 +101,9 @@ MAFilter bpm;
 
 void setup() {
   Serial.begin(115200);
+  _tensimeter.begin(115200);
+  // _gsm.begin(115200);
+
   pinMode(BEAT_LED, OUTPUT);
 
   filter_for_graph = EEPROM.read(OPTIONS);
@@ -81,8 +126,6 @@ void setup() {
   /* begin MAX30102 */
   if (!sensor.begin()) {
     state = 0;
-    while (1)
-      ;
   } else state = 3;
   sensor.setup();
 
@@ -92,6 +135,14 @@ void setup() {
 
 
 void loop() {
+  // updateSerial();
+  /* Waiting data from tensimeter */
+  if (_tensimeter.available()) {
+    data_available = 1;
+    _tensimeter.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+    delay(500);
+  }
+
   /* MAX30102 routine */
   sensor.check();
   long now = millis();
@@ -103,7 +154,7 @@ void loop() {
   sensor.nextSample();
 
   if (irValue < 5000) {
-    state = (sleep_counter <= 50 ? 1 : 4);  // finger not down message
+    state = (sleep_counter <= 50 ? 1 : 3);
     delay(100);
     ++sleep_counter;
     if (sleep_counter > 100) {
@@ -111,6 +162,7 @@ void loop() {
       sleep_counter = 0;
     }
   } else {
+    state = 2;
     sleep_counter = 0;
     int16_t IR_signal, Red_signal;
     bool beatRed, beatIR;
@@ -131,6 +183,28 @@ void loop() {
       if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
       lastBeat = now;
       digitalWrite(BEAT_LED, HIGH);
+      //
+      display.clearDisplay();
+      display.drawBitmap(0, 0, logo3_bmp, 32, 32, WHITE);
+      display.setTextSize(2);
+      display.setCursor(42, 15);
+      display.print(beatAvg);
+      display.setCursor(90, 15);
+      display.print(SPO2);
+
+      display.setTextSize(1);
+      display.setCursor(42, 3);
+      display.print("bpm");
+      display.setCursor(90, 3);
+      display.print("%SpO2");
+      display.setCursor(5, 41);
+      display.print("Systole : ");
+      display.print(sphygmo.value.sys);
+      display.setCursor(5, 55);
+      display.print("Diastole: ");
+      display.print(sphygmo.value.dias);
+      display.display();
+      //
       led_on = true;
       // compute SpO2 ratio
       long numerator = (pulseRed.avgAC() * pulseIR.avgDC()) / 256;
@@ -143,11 +217,48 @@ void loop() {
         SPO2 = pgm_read_byte_near(&spo2_table[RX100]);
     }
   }
-  // flash led on beat for 25 ms
   if (led_on && (now - lastBeat) > 25) {
     digitalWrite(BEAT_LED, LOW);
     led_on = false;
   }
+
+  /* Condition checking
+   * idx = 0: normal
+   * idx = 1: warn
+   * idx = 2: danger
+   */
+  // if (data_available) {
+  //   if (SPO2 < 95) idx += 2;
+  //   else idx += 0;
+
+  //   if (sphygmo.value.sys < 90 || sphygmo.value.sys > 180) idx += 2;
+  //   else if (90 <= sphygmo.value.sys <= 100 || 150 <= sphygmo.value.sys <= 180) idx += 1;
+  //   else idx += 0;
+
+  //   if (sphygmo.value.dias > 120) idx += 2;
+  //   else if (100 <= sphygmo.value.dias <= 120) idx += 1;
+  //   else idx += 0;
+
+  //   if (beatAvg < 40 || beatAvg > 120) idx += 2;
+  //   else if (40 <= beatAvg <= 50 || 100 <= beatAvg <= 120) idx += 1;
+  //   else idx += 0;
+
+  //   // auto message
+  //   if (idx > 2) {
+  //     // send danger message
+  //     String message = "[ Danger ]";
+  //     // send_sms(device2_number, message);
+
+  //     idx = 0;
+  //   } else if (idx == 2) {
+  //     // send warning message
+  //     String message = "[ Warning ]";
+  //     // send_sms(device2_number, message);
+
+  //     idx = 0;
+  //   }
+  //   data_available = 0;
+  // }
 
   /* SSD1306 routine */
   nowTime = millis();
@@ -158,31 +269,33 @@ void loop() {
         display.setTextSize(1);
         display.setCursor(0, 0);
         display.println("Device not found!");
-
+        while (1)
+          ;
         break;
       case 1:
         display.setTextSize(1);
         display.setCursor(0, 28);
         display.println("Place your finger!");
-        if (irValue > 5000) {
-          state = 2;
-        }
-        break;
-      case 2:
-        display.setTextSize(1);
-        display.setCursor(0, 28);
-        display.print("Pulse Rate: ");
-        display.println(beatAvg);
-        display.print("SpO2: ");
-        display.println(SPO2);
-        break;
-      case 3:
-        display.setTextSize(1);
-        display.setCursor(0, 28);
-        display.println("Wait until receiveing the data");
 
         break;
-      case 4:
+      case 2:
+        display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
+        display.setTextSize(2);
+        display.setCursor(42, 15);
+        display.print(beatAvg);
+        display.setCursor(90, 15);
+        display.print(SPO2);
+
+        display.setTextSize(1);
+        display.setCursor(42, 3); display.print("bpm");
+        display.setCursor(90, 3); display.print("%SpO2");
+        display.setCursor(5, 41); display.print("Systole : ");
+        display.setCursor(65, 41); display.print(sphygmo.value.sys);
+        display.setCursor(5, 55); display.print("Diastole: ");
+        display.setCursor(65, 55); display.print(sphygmo.value.dias);
+
+        break;
+      case 3:
         display.setTextSize(1);
         display.setCursor(0, 28);
         display.println("OFF IN");
@@ -199,11 +312,11 @@ void loop() {
 
 
 void action_isr() {
-  // state++;
-  // if (state > 4) state = 1;
 }
 
 void send_isr() {
+  // String message = "[ REPORT ]";
+  // send_sms(doctor_number, message);
 }
 
 void go_sleep() {
@@ -222,3 +335,25 @@ void go_sleep() {
   // cause reset
   setup();
 }
+
+// void send_sms(String number, String message) {
+//   _gsm.println("AT");
+//   updateSerial();
+//   _gsm.println("AT+CMGF=1");
+//   updateSerial();
+//   _gsm.print("AT+CMGS=\"" + number + "\"");
+//   updateSerial();
+//   _gsm.print(message + "\nSpO2 = " + String(SPO2) + "\nSystole = " + String(sphygmo.value.sys) + "\nDiastole = " + String(sphygmo.value.dias) + "\nPulse Rate = " + String(beatAvg));
+//   updateSerial();
+//   _gsm.write(26);
+// }
+
+// void updateSerial() {
+//   delay(500);
+//   while (Serial.available()) {
+//     _gsm.write(Serial.read());
+//   }
+//   while(_gsm.available()) {
+//     Serial.write(_gsm.read());
+//   }
+// }
