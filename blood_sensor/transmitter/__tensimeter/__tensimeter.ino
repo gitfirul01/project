@@ -8,7 +8,7 @@
 #include <Wire.h>
 #include <SoftwareSerial.h>
 
-SoftwareSerial port1(10, 11);
+SoftwareSerial _port1(10, 11);
 
 typedef struct data_ {
   int sys;
@@ -28,22 +28,28 @@ bool data_available;
 long lastTime;
 
 void setup() {
-  Serial.begin(115200);
-  port1.begin(115200);
+  Serial.begin(9600);
+  _port1.begin(9600);
   delay(500);
 
   Wire.begin(0x50);
   Wire.onReceive(receiveEvent);
 
   // Serial.println("done");
+//   sphygmo.value.sys = 0;
+// sphygmo.value.dias = 0;
 }
 
 void loop() {
   if (millis() - lastTime > 1000) {
     if (data_available) {
-      port1.write(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+      _port1.write(sphygmo.byteArray, sizeof(sphygmo.byteArray));
     }
     data_available = 0;
+
+// sphygmo.value.sys++;
+// sphygmo.value.dias++;
+
     lastTime = millis();
   }
 }
@@ -65,14 +71,15 @@ void receiveEvent(int howMany) {
         countT++;
       }
     } else if (countT == 4) {
-      // Serial.write(c);
+      Serial.write(c);
       if (count == 0) {
         sphygmo.value.sys = c;
       } else if (count == 1) {
         sphygmo.value.dias = c;
-      } else {
-        // sphygmo.value.bpm = c;
       }
+      // else {
+      //   sphygmo.value.bpm = c;
+      // }
       count++;
       if (count == 3) {
         // sprintf(buff, "sys:%d, dias:%d, bpm:%d", sphygmo.value.sys, sphygmo.value.dias, sphygmo.value.bpm);
