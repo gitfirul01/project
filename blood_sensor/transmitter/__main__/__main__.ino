@@ -101,7 +101,7 @@ MAFilter bpm;
 
 void setup() {
   Serial.begin(115200);
-  _tensimeter.begin(115200);
+  _tensimeter.begin(9600);
   // _gsm.begin(115200);
 
   pinMode(BEAT_LED, OUTPUT);
@@ -131,6 +131,9 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(act_btn), action_isr, FALLING);
   attachInterrupt(digitalPinToInterrupt(send_btn), send_isr, FALLING);
+
+sphygmo.value.sys = 0;
+sphygmo.value.dias = 0;
 }
 
 
