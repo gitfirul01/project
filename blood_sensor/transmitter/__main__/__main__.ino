@@ -78,7 +78,7 @@ int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
 
 long lastTime = 0, nowTime = 0;
-long lastBeat = 0;
+long lastBeat = 0, now = 0;
 
 bool led_on = false;
 int state;
@@ -102,7 +102,7 @@ MAFilter bpm;
 void setup() {
   Serial.begin(115200);
   _tensimeter.begin(9600);
-  // _gsm.begin(115200);
+  // _gsm.begin(2400);
 
   pinMode(BEAT_LED, OUTPUT);
 
@@ -138,7 +138,6 @@ void setup() {
 
 
 void loop() {
-  // updateSerial();
   /* Waiting data from tensimeter */
   if (_tensimeter.available()) {
     data_available = 1;
@@ -147,123 +146,12 @@ void loop() {
   }
 
   /* MAX30102 routine */
-  sensor.check();
-  long now = millis();
-
-  if (!sensor.available()) return;
-
-  uint32_t irValue = sensor.getIR();
-  uint32_t redValue = sensor.getRed();
-  sensor.nextSample();
-
-  if (irValue < 5000) {
-    state = (sleep_counter <= 50 ? 1 : 3);
-    delay(100);
-    ++sleep_counter;
-    if (sleep_counter > 100) {
-      go_sleep();
-      sleep_counter = 0;
-    }
-  } else {
-    state = 2;
-    sleep_counter = 0;
-    int16_t IR_signal, Red_signal;
-    bool beatRed, beatIR;
-    if (!filter_for_graph) {
-      IR_signal = pulseIR.dc_filter(irValue);
-      Red_signal = pulseRed.dc_filter(redValue);
-      beatRed = pulseRed.isBeat(pulseRed.ma_filter(Red_signal));
-      beatIR = pulseIR.isBeat(pulseIR.ma_filter(IR_signal));
-    } else {
-      IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
-      Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
-      beatRed = pulseRed.isBeat(Red_signal);
-      beatIR = pulseIR.isBeat(IR_signal);
-    }
-    // check IR or Red for heartbeat
-    if (draw_Red ? beatRed : beatIR) {
-      long btpm = 60000 / (now - lastBeat);
-      if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
-      lastBeat = now;
-      digitalWrite(BEAT_LED, HIGH);
-      //
-      display.clearDisplay();
-      display.drawBitmap(0, 0, logo3_bmp, 32, 32, WHITE);
-      display.setTextSize(2);
-      display.setCursor(42, 15);
-      display.print(beatAvg);
-      display.setCursor(90, 15);
-      display.print(SPO2);
-
-      display.setTextSize(1);
-      display.setCursor(42, 3);
-      display.print("bpm");
-      display.setCursor(90, 3);
-      display.print("%SpO2");
-      display.setCursor(5, 41);
-      display.print("Systole : ");
-      display.print(sphygmo.value.sys);
-      display.setCursor(5, 55);
-      display.print("Diastole: ");
-      display.print(sphygmo.value.dias);
-      display.display();
-      //
-      led_on = true;
-      // compute SpO2 ratio
-      long numerator = (pulseRed.avgAC() * pulseIR.avgDC()) / 256;
-      long denominator = (pulseRed.avgDC() * pulseIR.avgAC()) / 256;
-      int RX100 = (denominator > 0) ? (numerator * 100) / denominator : 999;
-      // using formula
-      SPO2f = (10400 - RX100 * 17 + 50) / 100;
-      // from table
-      if ((RX100 >= 0) && (RX100 < 184))
-        SPO2 = pgm_read_byte_near(&spo2_table[RX100]);
-    }
-  }
-  if (led_on && (now - lastBeat) > 25) {
-    digitalWrite(BEAT_LED, LOW);
-    led_on = false;
-  }
+  now = millis();
+  __max30102__();
 
   nowTime = millis();
   if (nowTime - lastTime > 300) {
-  /* Condition checking
-   * idx = 0: normal
-   * idx = 1: warn
-   * idx = 2: danger
-   */
-    if (data_available) {
-      //   if (SPO2 < 95) idx += 2;
-      //   else idx += 0;
-
-      //   if (sphygmo.value.sys < 90 || sphygmo.value.sys > 180) idx += 2;
-      //   else if (90 <= sphygmo.value.sys <= 100 || 150 <= sphygmo.value.sys <= 180) idx += 1;
-      //   else idx += 0;
-
-      //   if (sphygmo.value.dias > 120) idx += 2;
-      //   else if (100 <= sphygmo.value.dias <= 120) idx += 1;
-      //   else idx += 0;
-
-      //   if (beatAvg < 40 || beatAvg > 120) idx += 2;
-      //   else if (40 <= beatAvg <= 50 || 100 <= beatAvg <= 120) idx += 1;
-      //   else idx += 0;
-
-      //   // auto message
-      //   if (idx > 2) {
-      //     // send danger message
-      //     String message = "[ Danger ]";
-      //     // send_sms(device2_number, message);
-
-      //     idx = 0;
-      //   } else if (idx == 2) {
-      //     // send warning message
-      //     String message = "[ Warning ]";
-      //     // send_sms(device2_number, message);
-
-      //     idx = 0;
-      //   }
-      data_available = 0;
-    }
+    __check_condition__();
 
     /* SSD1306 routine */
     display.clearDisplay();
@@ -372,6 +260,125 @@ void go_sleep() {
   sleep_mode();  // sleep until act_button press
   // cause reset
   setup();
+}
+
+void __max30102__() {
+  sensor.check();
+
+  if (!sensor.available()) return;
+
+  uint32_t irValue = sensor.getIR();
+  uint32_t redValue = sensor.getRed();
+  sensor.nextSample();
+
+  if (irValue < 50000) {
+    state = (sleep_counter <= 50 ? 1 : 3);
+    delay(100);
+    ++sleep_counter;
+    if (sleep_counter > 100) {
+      go_sleep();
+      sleep_counter = 0;
+    }
+  } else {
+    state = 2;
+    sleep_counter = 0;
+    int16_t IR_signal, Red_signal;
+    bool beatRed, beatIR;
+    if (!filter_for_graph) {
+      IR_signal = pulseIR.dc_filter(irValue);
+      Red_signal = pulseRed.dc_filter(redValue);
+      beatRed = pulseRed.isBeat(pulseRed.ma_filter(Red_signal));
+      beatIR = pulseIR.isBeat(pulseIR.ma_filter(IR_signal));
+    } else {
+      IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
+      Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
+      beatRed = pulseRed.isBeat(Red_signal);
+      beatIR = pulseIR.isBeat(IR_signal);
+    }
+    // check IR or Red for heartbeat
+    if (draw_Red ? beatRed : beatIR) {
+      long btpm = 60000 / (now - lastBeat);
+      if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
+      lastBeat = now;
+      digitalWrite(BEAT_LED, HIGH);
+      //
+      display.clearDisplay();
+      display.drawBitmap(0, 0, logo3_bmp, 32, 32, WHITE);
+      display.setTextSize(2);
+      display.setCursor(42, 15);
+      display.print(beatAvg);
+      display.setCursor(90, 15);
+      display.print(SPO2);
+
+      display.setTextSize(1);
+      display.setCursor(42, 3);
+      display.print("bpm");
+      display.setCursor(90, 3);
+      display.print("%SpO2");
+      display.setCursor(5, 41);
+      display.print("Systole : ");
+      display.print(sphygmo.value.sys);
+      display.setCursor(5, 55);
+      display.print("Diastole: ");
+      display.print(sphygmo.value.dias);
+      display.display();
+      //
+      led_on = true;
+      // compute SpO2 ratio
+      long numerator = (pulseRed.avgAC() * pulseIR.avgDC()) / 256;
+      long denominator = (pulseRed.avgDC() * pulseIR.avgAC()) / 256;
+      int RX100 = (denominator > 0) ? (numerator * 100) / denominator : 999;
+      // using formula
+      SPO2f = (10400 - RX100 * 17 + 50) / 100;
+      // from table
+      if ((RX100 >= 0) && (RX100 < 184))
+        SPO2 = pgm_read_byte_near(&spo2_table[RX100]);
+    }
+  }
+  if (led_on && (now - lastBeat) > 25) {
+    digitalWrite(BEAT_LED, LOW);
+    led_on = false;
+  }
+}
+
+void __check_condition__() {
+  /* Condition checking
+   * idx = 0: normal
+   * idx = 1: warn
+   * idx = 2: danger
+   */
+  if (data_available) {
+    //   if (SPO2 < 95) idx += 2;
+    //   else idx += 0;
+
+    //   if (sphygmo.value.sys < 90 || sphygmo.value.sys > 180) idx += 2;
+    //   else if (90 <= sphygmo.value.sys <= 100 || 150 <= sphygmo.value.sys <= 180) idx += 1;
+    //   else idx += 0;
+
+    //   if (sphygmo.value.dias > 120) idx += 2;
+    //   else if (100 <= sphygmo.value.dias <= 120) idx += 1;
+    //   else idx += 0;
+
+    //   if (beatAvg < 40 || beatAvg > 120) idx += 2;
+    //   else if (40 <= beatAvg <= 50 || 100 <= beatAvg <= 120) idx += 1;
+    //   else idx += 0;
+
+    //   // auto message
+    //   if (idx > 2) {
+    //     // send danger message
+    //     String message = "[ Danger ]";
+    //     // send_sms(device2_number, message);
+
+    //     idx = 0;
+    //   } else if (idx == 2) {
+    //     // send warning message
+    //     String message = "[ Warning ]";
+    //     // send_sms(device2_number, message);
+
+    //     idx = 0;
+    //   }
+    data_available = 0;
+  }
 }
 
 // void send_sms(String number, String message) {
