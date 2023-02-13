@@ -72,7 +72,7 @@ typedef union packet_ {
 packet_ sphygmo;
 
 int idx = 0;
-bool data_available;
+bool data_available = 0;
 
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
@@ -132,8 +132,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(act_btn), action_isr, FALLING);
   attachInterrupt(digitalPinToInterrupt(send_btn), send_isr, FALLING);
 
-sphygmo.value.sys = 0;
-sphygmo.value.dias = 0;
+  sphygmo.value.sys = 0;
+  sphygmo.value.dias = 0;
 }
 
 
@@ -225,47 +225,47 @@ void loop() {
     led_on = false;
   }
 
+  nowTime = millis();
+  if (nowTime - lastTime > 300) {
   /* Condition checking
    * idx = 0: normal
    * idx = 1: warn
    * idx = 2: danger
    */
-  // if (data_available) {
-  //   if (SPO2 < 95) idx += 2;
-  //   else idx += 0;
+    if (data_available) {
+      //   if (SPO2 < 95) idx += 2;
+      //   else idx += 0;
 
-  //   if (sphygmo.value.sys < 90 || sphygmo.value.sys > 180) idx += 2;
-  //   else if (90 <= sphygmo.value.sys <= 100 || 150 <= sphygmo.value.sys <= 180) idx += 1;
-  //   else idx += 0;
+      //   if (sphygmo.value.sys < 90 || sphygmo.value.sys > 180) idx += 2;
+      //   else if (90 <= sphygmo.value.sys <= 100 || 150 <= sphygmo.value.sys <= 180) idx += 1;
+      //   else idx += 0;
 
-  //   if (sphygmo.value.dias > 120) idx += 2;
-  //   else if (100 <= sphygmo.value.dias <= 120) idx += 1;
-  //   else idx += 0;
+      //   if (sphygmo.value.dias > 120) idx += 2;
+      //   else if (100 <= sphygmo.value.dias <= 120) idx += 1;
+      //   else idx += 0;
 
-  //   if (beatAvg < 40 || beatAvg > 120) idx += 2;
-  //   else if (40 <= beatAvg <= 50 || 100 <= beatAvg <= 120) idx += 1;
-  //   else idx += 0;
+      //   if (beatAvg < 40 || beatAvg > 120) idx += 2;
+      //   else if (40 <= beatAvg <= 50 || 100 <= beatAvg <= 120) idx += 1;
+      //   else idx += 0;
 
-  //   // auto message
-  //   if (idx > 2) {
-  //     // send danger message
-  //     String message = "[ Danger ]";
-  //     // send_sms(device2_number, message);
+      //   // auto message
+      //   if (idx > 2) {
+      //     // send danger message
+      //     String message = "[ Danger ]";
+      //     // send_sms(device2_number, message);
 
-  //     idx = 0;
-  //   } else if (idx == 2) {
-  //     // send warning message
-  //     String message = "[ Warning ]";
-  //     // send_sms(device2_number, message);
+      //     idx = 0;
+      //   } else if (idx == 2) {
+      //     // send warning message
+      //     String message = "[ Warning ]";
+      //     // send_sms(device2_number, message);
 
-  //     idx = 0;
-  //   }
-  //   data_available = 0;
-  // }
+      //     idx = 0;
+      //   }
+      data_available = 0;
+    }
 
-  /* SSD1306 routine */
-  nowTime = millis();
-  if (nowTime - lastTime > 300) {
+    /* SSD1306 routine */
     display.clearDisplay();
     switch (state) {
       case 0:
@@ -290,12 +290,18 @@ void loop() {
         display.print(SPO2);
 
         display.setTextSize(1);
-        display.setCursor(42, 3); display.print("bpm");
-        display.setCursor(90, 3); display.print("%SpO2");
-        display.setCursor(5, 41); display.print("Systole : ");
-        display.setCursor(65, 41); display.print(sphygmo.value.sys);
-        display.setCursor(5, 55); display.print("Diastole: ");
-        display.setCursor(65, 55); display.print(sphygmo.value.dias);
+        display.setCursor(42, 3);
+        display.print("bpm");
+        display.setCursor(90, 3);
+        display.print("%SpO2");
+        display.setCursor(5, 41);
+        display.print("Systole : ");
+        display.setCursor(65, 41);
+        display.print(sphygmo.value.sys);
+        display.setCursor(5, 55);
+        display.print("Diastole: ");
+        display.setCursor(65, 55);
+        display.print(sphygmo.value.dias);
 
         break;
       case 3:
@@ -304,6 +310,34 @@ void loop() {
         display.println("OFF IN");
         display.write(10 - sleep_counter / 10 + '0');
         display.write('s');
+
+        break;
+      case 4:  // condition interface
+        display.setTextSize(1);
+        if (idx == 0) {
+          display.setCursor(0, 28);
+          display.println("Normal");
+        }
+        if (idx == 1) {
+          display.println("Normal");
+          display.setCursor(0, 25);
+          display.println("ulangi pengamatan dalam 30 menit");
+        }
+        if (idx == 2) {
+          display.setCursor(0, 22);
+          display.println("Waspada");
+          display.println("panggil dokter kandungan dan");
+          display.println("ulangi pengamatan dalam 30 menit");
+        }
+        if (idx > 2) {
+          display.println("Bahaya");
+          display.setCursor(0, 19);
+          display.println("peninjauan segera oleh dokter kandungan");
+          display.println("dan observasi ulang dalam 15 menit");
+          display.println("atau pemantauan terus menerus");
+        }
+        delay(5000);
+        state = 2;
 
         break;
     }
@@ -315,6 +349,7 @@ void loop() {
 
 
 void action_isr() {
+  state = 2;
 }
 
 void send_isr() {
