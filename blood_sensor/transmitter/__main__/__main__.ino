@@ -72,13 +72,12 @@ typedef union packet_ {
 packet_ sphygmo;
 
 int state;
-int idx = 0;
+int risk;
 bool led_on = false;
-bool data_available = 0;
+bool data_available = false;
 
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
-int sys = 0, dias = 0;
 
 long lastTime = 0, nowTime = 0;
 long lastBeat = 0, now = 0;
@@ -122,9 +121,8 @@ void setup() {
   delay(2000);
 
   /* begin MAX30102 */
-  if (!sensor.begin()) {
+  if (!sensor.begin())
     state = 0;
-  } else state = 3;
   sensor.setup();
 
   attachInterrupt(digitalPinToInterrupt(act_btn), action_isr, FALLING);
@@ -136,11 +134,9 @@ void setup() {
 void loop() {
   /* Waiting data from tensimeter */
   if (_tensimeter.available()) {
-    data_available = 1;
+    data_available = true;
     _tensimeter.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
     delay(500);
-    sys = sphygmo.value.sys;
-    dias = sphygmo.value.dias;
   }
 
   now = millis();
@@ -156,26 +152,19 @@ void loop() {
 
 
 void action_isr() {
-  state = 2;
+  if (state == 5)
+    state = 2;
 }
 
 void send_isr() {
-  // auto message
-  // if (idx > 2) {
-  //   // send danger message
-  //   String message = "[ Danger ]";
-  //   // send_sms(device2_number, message);
-
-  //   idx = 0;
-  // } else if (idx == 2) {
-  //   // send warning message
-  //   String message = "[ Warning ]";
-  //   // send_sms(device2_number, message);
-
-  //   idx = 0;
+  // if (risk > 2) {
+  //   String message = "Danger";
+  // } else if (risk == 2) {
+  //   String message = "Warning";
   // }
-  // String message = "[ REPORT ]";
-  // send_sms(doctor_number, message);
+  // // send_sms(device2_number, message);
+  // // send_sms(doctor_number, message);
+  // risk = 0;
 }
 
 void go_sleep() {
@@ -306,11 +295,11 @@ void __ssd1306__() {
       display.setCursor(5, 41);
       display.print("Systole : ");
       display.setCursor(65, 41);
-      display.print(sys);
+      display.print(sphygmo.value.sys);
       display.setCursor(5, 55);
       display.print("Diastole: ");
       display.setCursor(65, 55);
-      display.print(dias);
+      display.print(sphygmo.value.dias);
 
       break;
     case 3:
@@ -323,31 +312,33 @@ void __ssd1306__() {
       break;
     case 4:  // condition interface
       display.setTextSize(1);
-      if (idx == 0) {
+      if (risk == 0) {
         display.setCursor(0, 28);
         display.println("Normal");
       }
-      if (idx == 1) {
-        display.println("Normal");
+      if (risk == 1) {
         display.setCursor(0, 25);
+        display.println("Normal");
         display.println("ulangi pengamatan dalam 30 menit");
       }
-      if (idx == 2) {
+      if (risk == 2) {
         display.setCursor(0, 22);
         display.println("Waspada");
         display.println("panggil dokter kandungan dan");
         display.println("ulangi pengamatan dalam 30 menit");
       }
-      if (idx > 2) {
-        display.println("Bahaya");
+      if (risk > 2) {
         display.setCursor(0, 19);
+        display.println("Bahaya");
         display.println("peninjauan segera oleh dokter kandungan");
         display.println("dan observasi ulang dalam 15 menit");
         display.println("atau pemantauan terus menerus");
       }
-      delay(5000);
-      state = 2;
 
+      break;
+    case 5:
+      while (state == 5)
+        delay(1000);
       break;
   }
   display.display();
@@ -356,25 +347,21 @@ void __ssd1306__() {
 
 void __check_condition__() {
   /* Condition checking
-   * idx = 0: normal
-   * idx = 1: warn
-   * idx = 2: danger
+   * risk = 0: normal
+   * risk = 1: warn
+   * risk = 2: danger
    */
   if (data_available) {
-    // if (SPO2 < 95) idx += 2;
-    // else idx += 0;
+    // if (SPO2 < 95) risk += 2;
 
-    // if ((sys < 90) || (sys > 180)) idx += 2;
-    // else if (((90 <= sys) && (sys <= 100)) || ((150 <= sys) && (sys <= 180))) idx += 1;
-    // else idx += 0;
+    // if ((sphygmo.value.sys < 90) || (sphygmo.value.sys > 180)) risk += 2;
+    // else if (((90 <= sphygmo.value.sys) && (sphygmo.value.sys <= 100)) || ((150 <= sphygmo.value.sys) && (sphygmo.value.sys <= 180))) risk += 1;
 
-    // if (dias > 120) idx += 2;
-    // else if ((100 <= dias) && (dias <= 120)) idx += 1;
-    // else idx += 0;
+    // if (sphygmo.value.dias > 120) risk += 2;
+    // else if ((100 <= sphygmo.value.dias) && (sphygmo.value.dias <= 120)) risk += 1;
 
-    // if ((beatAvg < 40) || (beatAvg > 120)) idx += 2;
-    // else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) idx += 1;
-    // else idx += 0;
+    // if ((beatAvg < 40) || (beatAvg > 120)) risk += 2;
+    // else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) risk += 1;
 
     data_available = 0;
   }
