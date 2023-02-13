@@ -145,8 +145,8 @@ void loop() {
 
   nowTime = millis();
   if (nowTime - lastTime > 300) {
-    __check_condition__();
     __ssd1306__();
+    __check_condition__();
   }
 }
 
@@ -191,7 +191,6 @@ void go_sleep() {
 
 void __max30102__() {
   sensor.check();
-
   if (!sensor.available()) return;
 
   uint32_t irValue = sensor.getIR();
@@ -199,14 +198,13 @@ void __max30102__() {
   sensor.nextSample();
 
   if (irValue < 50000) {
-    // state = (sleep_counter <= 50 ? 1 : 3);
-    // delay(100);
-    // ++sleep_counter;
-    // if (sleep_counter > 100) {
-    //   go_sleep();
-    //   sleep_counter = 0;
-    // }
-    state = 4;
+    state = (sleep_counter <= 50 ? 1 : 3);
+    delay(100);
+    ++sleep_counter;
+    if (sleep_counter > 100) {
+      go_sleep();
+      sleep_counter = 0;
+    }
   } else {
     state = 2;
     sleep_counter = 0;
@@ -346,7 +344,7 @@ void __ssd1306__() {
         delay(1000);
         if (state != 4) {
           break;
-        }
+        }        
       }
       break;
   }
