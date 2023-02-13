@@ -19,13 +19,13 @@
 #define SPHYGMO_ADDRESS 0x50
 
 #define send_btn 2
-#define act_btn 3
+#define back_btn 3
 #define BEAT_LED LED_BUILTIN
 #define OPTIONS 7
 
-#define device1_number "+6281328431180"
-#define device2_number "+6281328431160"
-#define doctor_number "+62xxxxxxxxxx"
+#define device1_number "081328431180"
+#define device2_number "081328431160"
+#define doctor_number "08xxxxxxxxx"
 
 //spo2_table is approximated as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
 const uint8_t spo2_table[184] PROGMEM = { 95, 95, 95, 96, 96, 96, 97, 97, 97, 97, 97, 98, 98, 98, 98, 98, 99, 99, 99, 99,
@@ -116,7 +116,7 @@ void setup() {
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0, 28);
-  display.println("Welcome");
+  display.println(F("Welcome"));
   display.display();
   delay(2000);
 
@@ -126,20 +126,13 @@ void setup() {
   else state = 2;
   sensor.setup();
 
-  attachInterrupt(digitalPinToInterrupt(act_btn), action_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(back_btn), back_isr, FALLING);
   attachInterrupt(digitalPinToInterrupt(send_btn), send_isr, FALLING);
 }
 
 
 
 void loop() {
-  /* Waiting data from tensimeter */
-  if (_tensimeter.available()) {
-    data_available = true;
-    _tensimeter.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
-    delay(500);
-  }
-
   now = millis();
   __max30102__();
 
@@ -152,22 +145,21 @@ void loop() {
 
 
 
-void action_isr() {
+void back_isr() {
   if (state == 4)
     state = 2;
 }
 
 void send_isr() {
   if (state == 4) {
-    // if (risk > 2) {
-    //   String message = "Danger";
-    // } else if (risk == 2) {
-    //   String message = "Warning";
-    // }
-    // // send_sms(device2_number, message);
-    // // send_sms(doctor_number, message);
-    // risk = 0;
-
+    if (risk > 2) {
+      // send_sms(device2_number, "Danger");
+      // send_sms(doctor_number, "Danger");
+    } else if (risk == 2) {
+      //   send_sms(device2_number, "Warning");
+      //   send_sms(doctor_number, "Warning");
+    }
+    risk = 0;
     state = 2;
   }
 }
@@ -273,7 +265,7 @@ void __ssd1306__() {
     case 0:
       display.setTextSize(1);
       display.setCursor(0, 0);
-      display.println("Device not found!");
+      display.println(F("Device not found!"));
       display.display();
       while (1)
         ;
@@ -281,10 +273,16 @@ void __ssd1306__() {
     case 1:
       display.setTextSize(1);
       display.setCursor(0, 28);
-      display.println("Place your finger!");
+      display.println(F("Place your finger!"));
 
       break;
     case 2:
+      /* Waiting data from tensimeter */
+      if (_tensimeter.available()) {
+        data_available = true;
+        _tensimeter.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+        delay(500);
+      }    
       display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
       display.setTextSize(2);
       display.setCursor(42, 15);
@@ -294,15 +292,15 @@ void __ssd1306__() {
 
       display.setTextSize(1);
       display.setCursor(42, 3);
-      display.print("bpm");
+      display.print(F("bpm"));
       display.setCursor(90, 3);
-      display.print("%SpO2");
+      display.print(F("%SpO2"));
       display.setCursor(5, 41);
-      display.print("Systole : ");
+      display.print(F("Systole : "));
       display.setCursor(65, 41);
       display.print(sphygmo.value.sys);
       display.setCursor(5, 55);
-      display.print("Diastole: ");
+      display.print(F("Diastole: "));
       display.setCursor(65, 55);
       display.print(sphygmo.value.dias);
 
@@ -310,7 +308,7 @@ void __ssd1306__() {
     case 3:
       display.setTextSize(1);
       display.setCursor(0, 28);
-      display.println("OFF IN");
+      display.println(F("OFF IN"));
       display.write(10 - sleep_counter / 10 + '0');
       display.write('s');
 
@@ -319,32 +317,32 @@ void __ssd1306__() {
       display.setTextSize(1);
       if (risk == 0) {
         display.setCursor(0, 28);
-        display.println("Normal");
+        display.println(F("Normal"));
       }
       if (risk == 1) {
         display.setCursor(0, 25);
-        display.println("Normal");
-        display.println("ulangi pengamatan dalam 30 menit");
+        display.println(F("Normal"));
+        display.println(F("ulangi pengamatan dalam 30 menit"));
       }
       if (risk == 2) {
         display.setCursor(0, 22);
-        display.println("Waspada");
-        display.println("panggil dokter kandungan dan");
-        display.println("ulangi pengamatan dalam 30 menit");
+        display.println(F("Waspada"));
+        display.println(F("panggil dokter kandungan dan"));
+        display.println(F("ulangi pengamatan dalam 30 menit"));
       }
       if (risk > 2) {
         display.setCursor(0, 19);
-        display.println("Bahaya");
-        display.println("peninjauan segera oleh dokter kandungan");
-        display.println("dan observasi ulang dalam 15 menit");
-        display.println("atau pemantauan terus menerus");
+        display.println(F("Bahaya"));
+        display.println(F("peninjauan segera oleh dokter kandungan"));
+        display.println(F("dan observasi ulang dalam 15 menit"));
+        display.println(F("atau pemantauan terus menerus"));
       }
       display.display();
       while (1) {
         delay(1000);
         if (state != 4) {
           break;
-        }        
+        }
       }
       break;
   }
@@ -359,18 +357,17 @@ void __check_condition__() {
    * risk = 2: danger
    */
   if (data_available) {
-    // if (SPO2 < 95) risk += 2;
+    if (SPO2 < 95) risk += 2;
 
-    // if ((sphygmo.value.sys < 90) || (sphygmo.value.sys > 180)) risk += 2;
-    // else if (((90 <= sphygmo.value.sys) && (sphygmo.value.sys <= 100)) || ((150 <= sphygmo.value.sys) && (sphygmo.value.sys <= 180))) risk += 1;
+    if ((sphygmo.value.sys < 90) || (sphygmo.value.sys > 180)) risk += 2;
+    else if (((90 <= sphygmo.value.sys) && (sphygmo.value.sys <= 100)) || ((150 <= sphygmo.value.sys) && (sphygmo.value.sys <= 180))) risk += 1;
 
-    // if (sphygmo.value.dias > 120) risk += 2;
-    // else if ((100 <= sphygmo.value.dias) && (sphygmo.value.dias <= 120)) risk += 1;
+    if (sphygmo.value.dias > 120) risk += 2;
+    else if ((100 <= sphygmo.value.dias) && (sphygmo.value.dias <= 120)) risk += 1;
 
-    // if ((beatAvg < 40) || (beatAvg > 120)) risk += 2;
-    // else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) risk += 1;
-
-    data_available = 0;
+    if ((beatAvg < 40) || (beatAvg > 120)) risk += 2;
+    else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) risk += 1;
+    data_available = false;
   }
 }
 
