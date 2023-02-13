@@ -123,6 +123,7 @@ void setup() {
   /* begin MAX30102 */
   if (!sensor.begin())
     state = 0;
+  else state = 2;
   sensor.setup();
 
   attachInterrupt(digitalPinToInterrupt(act_btn), action_isr, FALLING);
@@ -152,7 +153,7 @@ void loop() {
 
 
 void action_isr() {
-  if (state == 5)
+  if (state == 4)
     state = 2;
 }
 
@@ -194,13 +195,14 @@ void __max30102__() {
   sensor.nextSample();
 
   if (irValue < 50000) {
-    state = (sleep_counter <= 50 ? 1 : 3);
-    delay(100);
-    ++sleep_counter;
-    if (sleep_counter > 100) {
-      go_sleep();
-      sleep_counter = 0;
-    }
+    // state = (sleep_counter <= 50 ? 1 : 3);
+    // delay(100);
+    // ++sleep_counter;
+    // if (sleep_counter > 100) {
+    //   go_sleep();
+    //   sleep_counter = 0;
+    // }
+    state = 4;
   } else {
     state = 2;
     sleep_counter = 0;
@@ -270,6 +272,7 @@ void __ssd1306__() {
       display.setTextSize(1);
       display.setCursor(0, 0);
       display.println("Device not found!");
+      display.display();
       while (1)
         ;
       break;
@@ -334,10 +337,8 @@ void __ssd1306__() {
         display.println("dan observasi ulang dalam 15 menit");
         display.println("atau pemantauan terus menerus");
       }
-
-      break;
-    case 5:
-      while (state == 5)
+      display.display();
+      while (state == 4)
         delay(1000);
       break;
   }
