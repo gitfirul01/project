@@ -88,7 +88,7 @@ uint8_t sleep_counter = 0;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 SoftwareSerial _tensimeter(10, 11);
-// SoftwareSerial _gsm(8, 9);
+SoftwareSerial _gsm(8, 9);
 MAX30102 sensor;
 Pulse pulseIR;
 Pulse pulseRed;
@@ -99,7 +99,7 @@ MAFilter bpm;
 void setup() {
   Serial.begin(115200);
   _tensimeter.begin(9600);
-  // _gsm.begin(2400);
+  _gsm.begin(2400);
 
   pinMode(BEAT_LED, OUTPUT);
 
@@ -152,13 +152,14 @@ void back_isr() {
 
 void send_isr() {
   if (state == 4) {
+    String msg;
     if (risk > 2) {
-      // send_sms(device2_number, "Danger");
-      // send_sms(doctor_number, "Danger");
+      msg = "Bahaya";
     } else if (risk == 2) {
-      //   send_sms(device2_number, "Warning");
-      //   send_sms(doctor_number, "Warning");
+      msg = "Waspada";
     }
+    // send_sms(device2_number, msg);
+    // send_sms(doctor_number, msg);
     risk = 0;
     state = 2;
   }
@@ -230,14 +231,14 @@ void __max30102__() {
 
       display.setTextSize(1);
       display.setCursor(42, 3);
-      display.print("bpm");
+      display.print(F("bpm"));
       display.setCursor(90, 3);
-      display.print("%SpO2");
+      display.print(F("%SpO2"));
       display.setCursor(5, 41);
-      display.print("Systole : ");
+      display.print(F("Systole : "));
       display.print(sphygmo.value.sys);
       display.setCursor(5, 55);
-      display.print("Diastole: ");
+      display.print(F("Diastole: "));
       display.print(sphygmo.value.dias);
       display.display();
       //
@@ -282,7 +283,7 @@ void __ssd1306__() {
         data_available = true;
         _tensimeter.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
         delay(500);
-      }    
+      }
       display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
       display.setTextSize(2);
       display.setCursor(42, 15);
@@ -319,18 +320,18 @@ void __ssd1306__() {
         display.setCursor(0, 28);
         display.println(F("Normal"));
       }
-      if (risk == 1) {
+      else if (risk == 1) {
         display.setCursor(0, 25);
         display.println(F("Normal"));
         display.println(F("ulangi pengamatan dalam 30 menit"));
       }
-      if (risk == 2) {
+      else if (risk == 2) {
         display.setCursor(0, 22);
         display.println(F("Waspada"));
         display.println(F("panggil dokter kandungan dan"));
         display.println(F("ulangi pengamatan dalam 30 menit"));
       }
-      if (risk > 2) {
+      else if (risk > 2) {
         display.setCursor(0, 19);
         display.println(F("Bahaya"));
         display.println(F("peninjauan segera oleh dokter kandungan"));
@@ -371,24 +372,24 @@ void __check_condition__() {
   }
 }
 
-// void send_sms(String number, String message) {
-//   _gsm.println("AT");
-//   updateSerial();
-//   _gsm.println("AT+CMGF=1");
-//   updateSerial();
-//   _gsm.print("AT+CMGS=\"" + number + "\"");
-//   updateSerial();
-//   _gsm.print(message + "\nSpO2 = " + String(SPO2) + "\nSystole = " + String(sphygmo.value.sys) + "\nDiastole = " + String(sphygmo.value.dias) + "\nPulse Rate = " + String(beatAvg));
-//   updateSerial();
-//   _gsm.write(26);
-// }
+void send_sms(String number, String message) {
+  _gsm.println("AT");
+  updateSerial();
+  _gsm.println("AT+CMGF=1");
+  updateSerial();
+  _gsm.print("AT+CMGS=\"" + number + "\"");
+  updateSerial();
+  _gsm.print("Status: " + message + "\n\nSpO2 = " + String(SPO2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(beatAvg));
+  updateSerial();
+  _gsm.write(26);
+}
 
-// void updateSerial() {
-//   delay(500);
-//   while (Serial.available()) {
-//     _gsm.write(Serial.read());
-//   }
-//   while(_gsm.available()) {
-//     Serial.write(_gsm.read());
-//   }
-// }
+void updateSerial() {
+  delay(500);
+  while (Serial.available()) {
+    _gsm.write(Serial.read());
+  }
+  while (_gsm.available()) {
+    Serial.write(_gsm.read());
+  }
+}
