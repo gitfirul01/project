@@ -71,7 +71,9 @@ typedef union packet_ {
 };
 packet_ sphygmo;
 
+int state;
 int idx = 0;
+bool led_on = false;
 bool data_available = 0;
 
 int beatAvg = 0;
@@ -81,14 +83,8 @@ int sys = 0, dias = 0;
 long lastTime = 0, nowTime = 0;
 long lastBeat = 0, now = 0;
 
-bool led_on = false;
-int state;
-
-int voltage;
 bool filter_for_graph = false;
 bool draw_Red = false;
-uint8_t pcflag = 0;
-uint8_t istate = 0;
 uint8_t sleep_counter = 0;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
@@ -147,14 +143,12 @@ void loop() {
     dias = sphygmo.value.dias;
   }
 
-  /* MAX30102 routine */
   now = millis();
   __max30102__();
 
   nowTime = millis();
   if (nowTime - lastTime > 300) {
     __check_condition__();
-    /* SSD1306 routine */
     __ssd1306__();
   }
 }
