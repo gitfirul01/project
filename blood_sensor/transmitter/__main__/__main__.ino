@@ -158,14 +158,18 @@ void action_isr() {
 }
 
 void send_isr() {
-  // if (risk > 2) {
-  //   String message = "Danger";
-  // } else if (risk == 2) {
-  //   String message = "Warning";
-  // }
-  // // send_sms(device2_number, message);
-  // // send_sms(doctor_number, message);
-  // risk = 0;
+  if (state == 4) {
+    // if (risk > 2) {
+    //   String message = "Danger";
+    // } else if (risk == 2) {
+    //   String message = "Warning";
+    // }
+    // // send_sms(device2_number, message);
+    // // send_sms(doctor_number, message);
+    // risk = 0;
+
+    state = 2;
+  }
 }
 
 void go_sleep() {
@@ -338,8 +342,12 @@ void __ssd1306__() {
         display.println("atau pemantauan terus menerus");
       }
       display.display();
-      while (state == 4)
+      while (1) {
         delay(1000);
+        if (state != 4) {
+          break;
+        }
+      }
       break;
   }
   display.display();
