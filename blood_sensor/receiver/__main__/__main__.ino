@@ -21,62 +21,66 @@ SoftwareSerial _gsm(gsm_tx, gsm_rx);
 
 
 void setup() {
-  /*
-      change baudrate to 2400 bps to solve the problem
-      AT+IPR=2400   (change baudrate)
-      AT&W          (save / write to memory)
-  */
   Serial.begin(2400);
   _gsm.begin(2400);
 
   pinMode(buz_pin, OUTPUT);
+  delay(500);
 
-  delay(1000);
   _gsm.println("AT");
-  updateSerial();
+  delay(500);
+  // updateSerial();
   _gsm.println("AT+CSQ");
-  updateSerial();
+  delay(500);
+  // updateSerial();
   _gsm.println("AT+CCID");
-  updateSerial();
+  delay(500);
+  // updateSerial();
   _gsm.println("AT+CREG?");
-  updateSerial();
+  delay(500);
+  // updateSerial();
 
   // SEND SMS
-  _gsm.println("AT+CMGF=1");
-  updateSerial();
-  _gsm.print("AT+CMGS=\"081228445269\"\r");
-  updateSerial();
-  _gsm.print("Tes SMS");
-  updateSerial();
-  _gsm.write(26); // send ASCII character of <CTRL+Z>
+  // _gsm.println("AT+CMGF=1");delay(500);
+  // updateSerial();
+  // _gsm.print("AT+CMGS=\"081228445269\"\r");delay(500);
+  // updateSerial();
+  // _gsm.print("Tes SMS");delay(500);
+  // updateSerial();
+  // _gsm.write(26); // send ASCII character of <CTRL+Z>delay(500);
 
   // RECEIVE SMS
-  // _gsm.println("AT");
+  _gsm.println("AT+CMGF=1");
+  delay(500);
   // updateSerial();
-  // _gsm.println("AT+CMGF=1");
-  // updateSerial();
-  // _gsm.println("AT+CNMI=1,2,0,0,0");
+  _gsm.println("AT+CNMI=1,2,0,0,0");
+  delay(500);
   // updateSerial();
 
   // MAKE A CALL
   // _gsm.println("ATD081228445269;");
+  // delay(500);
   // updateSerial();
   // delay(20000);
   // _gsm.println("ATH");
+  // delay(500);
   // updateSerial();
 }
 
 
 void loop() {
-  // device 2 standby sampai menerima pesan dari device 1
   updateSerial();
-
-  // ketika menerima pesan, maka buzzer akan berbunyi selama 10 detik
+  
+  if (msg.indexOf("REPORT") >= 0) {
+    msg_received = 1;
+  }
+  
   if (msg_received) {
     for (int i = 0; i < 5; i++) {
       buzzer();
     }
     msg_received = 0;
+    msg = "";
   }
 }
 
@@ -94,6 +98,8 @@ void updateSerial() {
     _gsm.write(Serial.read());
   }
   while (_gsm.available()) {
-    Serial.write(_gsm.read());
+    // Serial.write(Serial.read());
+    msg = _gsm.readString();
+    Serial.print(msg);
   }
 }
