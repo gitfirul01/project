@@ -4,7 +4,7 @@
 #include <Adafruit_SSD1306.h>
 #include <EEPROM.h>
 #include <avr/sleep.h>
- 
+
 #include "MAX30102.h"
 #include "Pulse.h"
 
@@ -145,16 +145,18 @@ void loop() {
   __max30102__();
 
   if (now - lastTime > 300) {
-    __ssd1306__();
     __check_condition__();
+    __ssd1306__();
   }
 }
 
 
 
 void back_isr() {
-  if (state == 4)
+  if (state == 4) {
+    risk = 0;
     state = 2;
+  }
 }
 
 void send_isr() {
@@ -169,7 +171,7 @@ void send_isr() {
     } else command.value.cmd = 'n';
 
     _arduino2_.write(command.byteArray, sizeof(command.byteArray));
-    
+
     // Serial.print(command.value.cmd); Serial.print("\t");
     // Serial.print(command.value.bpm); Serial.print("\t");
     // Serial.print(command.value.spo2); Serial.print("\t");
@@ -206,15 +208,15 @@ void __max30102__() {
   sensor.nextSample();
 
   if (irValue < 50000) {
-    state = (sleep_counter <= 50 ? 1 : 3);
+    state = (state == 4 ? 4 : (sleep_counter <= 100 ? 1 : 3));
     delay(100);
     ++sleep_counter;
-    if (sleep_counter > 100) {
+    if (sleep_counter > 150) {
       go_sleep();
       sleep_counter = 0;
     }
   } else {
-    state = 2;
+    state = (state == 4 ? 4 : 2);
     sleep_counter = 0;
     int16_t IR_signal, Red_signal;
     bool beatRed, beatIR;
@@ -236,26 +238,28 @@ void __max30102__() {
       lastBeat = now;
       digitalWrite(BEAT_LED, HIGH);
       //
-      display.clearDisplay();
-      display.drawBitmap(0, 0, logo3_bmp, 32, 32, WHITE);
-      display.setTextSize(2);
-      display.setCursor(42, 15);
-      display.print(beatAvg);
-      display.setCursor(90, 15);
-      display.print(SPO2);
+      if (state == 2) {
+        display.clearDisplay();
+        display.drawBitmap(0, 0, logo3_bmp, 32, 32, WHITE);
+        display.setTextSize(2);
+        display.setCursor(42, 15);
+        display.print(beatAvg);
+        display.setCursor(90, 15);
+        display.print(SPO2);
 
-      display.setTextSize(1);
-      display.setCursor(42, 3);
-      display.print(F("bpm"));
-      display.setCursor(90, 3);
-      display.print(F("%SpO2"));
-      display.setCursor(5, 41);
-      display.print(F("Systole : "));
-      display.print(sphygmo.value.sys);
-      display.setCursor(5, 55);
-      display.print(F("Diastole: "));
-      display.print(sphygmo.value.dias);
-      display.display();
+        display.setTextSize(1);
+        display.setCursor(42, 3);
+        display.print(F("bpm"));
+        display.setCursor(90, 3);
+        display.print(F("%SpO2"));
+        display.setCursor(5, 41);
+        display.print(F("Systole : "));
+        display.print(sphygmo.value.sys);
+        display.setCursor(5, 55);
+        display.print(F("Diastole: "));
+        display.print(sphygmo.value.dias);
+        display.display();
+      }
       //
       led_on = true;
       // compute SpO2 ratio
@@ -297,7 +301,6 @@ void __ssd1306__() {
       if (_arduino2_.available()) {
         data_available = true;
         _arduino2_.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
-        delay(500);
       }
       display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
       display.setTextSize(2);
@@ -325,37 +328,27 @@ void __ssd1306__() {
       display.setTextSize(1);
       display.setCursor(0, 28);
       display.println(F("OFF IN"));
-      display.write(10 - sleep_counter / 10 + '0');
-      display.write('s');
+      display.write(10 - (sleep_counter - 50) / 10 + '0');
+      display.write(' s');
 
       break;
     case 4:  // condition interface
       display.setTextSize(1);
+      display.setCursor(0, 0);
       if (risk == 0) {
-        display.setCursor(0, 28);
         display.println(F("Normal"));
       } else if (risk == 1) {
-        display.setCursor(0, 25);
         display.println(F("Normal"));
         display.println(F("ulangi pengamatan dalam 30 menit"));
       } else if (risk == 2) {
-        display.setCursor(0, 22);
         display.println(F("Waspada"));
         display.println(F("panggil dokter kandungan dan"));
         display.println(F("ulangi pengamatan dalam 30 menit"));
       } else if (risk > 2) {
-        display.setCursor(0, 19);
         display.println(F("Bahaya"));
         display.println(F("peninjauan segera oleh dokter kandungan"));
         display.println(F("dan observasi ulang dalam 15 menit"));
         display.println(F("atau pemantauan terus menerus"));
-      }
-      display.display();
-      while (1) {
-        delay(1000);
-        if (state != 4) {
-          break;
-        }
       }
       break;
   }
@@ -380,6 +373,9 @@ void __check_condition__() {
 
     if ((beatAvg < 40) || (beatAvg > 120)) risk += 2;
     else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) risk += 1;
+
+    state = 4;
     data_available = false;
+    delay(5000);
   }
 }
