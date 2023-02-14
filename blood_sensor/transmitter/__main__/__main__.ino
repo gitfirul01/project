@@ -79,8 +79,8 @@ bool data_available = false;
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
 
-long lastTime = 0, nowTime = 0;
-long lastBeat = 0, now = 0;
+long now = 0;
+long lastTime = 0, lastBeat = 0;
 
 bool filter_for_graph = false;
 bool draw_Red = false;
@@ -136,8 +136,7 @@ void loop() {
   now = millis();
   __max30102__();
 
-  nowTime = millis();
-  if (nowTime - lastTime > 300) {
+  if (now - lastTime > 300) {
     __ssd1306__();
     __check_condition__();
   }
@@ -319,19 +318,16 @@ void __ssd1306__() {
       if (risk == 0) {
         display.setCursor(0, 28);
         display.println(F("Normal"));
-      }
-      else if (risk == 1) {
+      } else if (risk == 1) {
         display.setCursor(0, 25);
         display.println(F("Normal"));
         display.println(F("ulangi pengamatan dalam 30 menit"));
-      }
-      else if (risk == 2) {
+      } else if (risk == 2) {
         display.setCursor(0, 22);
         display.println(F("Waspada"));
         display.println(F("panggil dokter kandungan dan"));
         display.println(F("ulangi pengamatan dalam 30 menit"));
-      }
-      else if (risk > 2) {
+      } else if (risk > 2) {
         display.setCursor(0, 19);
         display.println(F("Bahaya"));
         display.println(F("peninjauan segera oleh dokter kandungan"));
@@ -348,7 +344,7 @@ void __ssd1306__() {
       break;
   }
   display.display();
-  lastTime = nowTime;
+  lastTime = now;
 }
 
 void __check_condition__() {
