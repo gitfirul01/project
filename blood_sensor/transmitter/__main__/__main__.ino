@@ -23,10 +23,6 @@
 #define BEAT_LED LED_BUILTIN
 #define OPTIONS 7
 
-#define device1_number "081328431180"
-#define device2_number "081328431160"
-#define doctor_number "08xxxxxxxxx"
-
 //spo2_table is approximated as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
 const uint8_t spo2_table[184] PROGMEM = { 95, 95, 95, 96, 96, 96, 97, 97, 97, 97, 97, 98, 98, 98, 98, 98, 99, 99, 99, 99,
                                           99, 99, 99, 99, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100,
@@ -61,15 +57,29 @@ static const unsigned char PROGMEM logo3_bmp[] = {
   0x00, 0x08, 0x10, 0x00, 0x00, 0x06, 0x60, 0x00, 0x00, 0x03, 0xC0, 0x00, 0x00, 0x01, 0x80, 0x00
 };
 
-typedef struct data_ {
+// data to receive
+struct data_1 {
   int sys;
   int dias;
 };
-typedef union packet_ {
-  data_ value;
-  byte byteArray[sizeof(data_)];
+union packet_1 {
+  data_1 value;
+  byte byteArray[sizeof(data_1)];
 };
-packet_ sphygmo;
+packet_1 sphygmo;
+
+// data to send
+struct data_2 {
+  int spo2;
+  int bpm;
+  char cmd;
+};
+union packet_2 {
+  data_2 value;
+  byte byteArray[sizeof(data_2)];
+};
+packet_2 command;
+
 
 int state;
 int risk;
@@ -87,8 +97,7 @@ bool draw_Red = false;
 uint8_t sleep_counter = 0;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
-SoftwareSerial _tensimeter(10, 11);
-SoftwareSerial _gsm(8, 9);
+SoftwareSerial _arduino2_(10, 11);
 MAX30102 sensor;
 Pulse pulseIR;
 Pulse pulseRed;
@@ -97,9 +106,8 @@ MAFilter bpm;
 
 
 void setup() {
-  Serial.begin(115200);
-  _tensimeter.begin(9600);
-  _gsm.begin(2400);
+  Serial.begin(9600);
+  _arduino2_.begin(9600);
 
   pinMode(BEAT_LED, OUTPUT);
 
@@ -151,14 +159,22 @@ void back_isr() {
 
 void send_isr() {
   if (state == 4) {
-    String msg;
+    command.value.bpm = beatAvg;
+    command.value.spo2 = SPO2;
+
     if (risk > 2) {
-      msg = "Bahaya";
+      command.value.cmd = 'D';
     } else if (risk == 2) {
-      msg = "Waspada";
-    }
-    // send_sms(device2_number, msg);
-    // send_sms(doctor_number, msg);
+      command.value.cmd = 'W';
+    } else command.value.cmd = 'n';
+
+    _arduino2_.write(command.byteArray, sizeof(command.byteArray));
+    
+    // Serial.print(command.value.cmd); Serial.print("\t");
+    // Serial.print(command.value.bpm); Serial.print("\t");
+    // Serial.print(command.value.spo2); Serial.print("\t");
+    // Serial.println("done");
+
     risk = 0;
     state = 2;
   }
@@ -278,9 +294,9 @@ void __ssd1306__() {
       break;
     case 2:
       /* Waiting data from tensimeter */
-      if (_tensimeter.available()) {
+      if (_arduino2_.available()) {
         data_available = true;
-        _tensimeter.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+        _arduino2_.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
         delay(500);
       }
       display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
@@ -365,27 +381,5 @@ void __check_condition__() {
     if ((beatAvg < 40) || (beatAvg > 120)) risk += 2;
     else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) risk += 1;
     data_available = false;
-  }
-}
-
-void send_sms(String number, String message) {
-  _gsm.println("AT");
-  updateSerial();
-  _gsm.println("AT+CMGF=1");
-  updateSerial();
-  _gsm.print("AT+CMGS=\"" + number + "\"");
-  updateSerial();
-  _gsm.print("Status: " + message + "\n\nSpO2 = " + String(SPO2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(beatAvg));
-  updateSerial();
-  _gsm.write(26);
-}
-
-void updateSerial() {
-  delay(500);
-  while (Serial.available()) {
-    _gsm.write(Serial.read());
-  }
-  while (_gsm.available()) {
-    Serial.write(_gsm.read());
   }
 }
