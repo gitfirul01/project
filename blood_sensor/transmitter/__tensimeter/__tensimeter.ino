@@ -10,7 +10,7 @@
 
 #define device1_number "081328431180"
 #define device2_number "081328431160"
-#define doctor_number "08xxxxxxxxx"
+#define doctor_number "081228445269"
 
 SoftwareSerial _arduino1_(10, 11);
 SoftwareSerial _gsm(8, 9);
@@ -67,23 +67,28 @@ void loop() {
   while (_arduino1_.available()) {
     _arduino1_.readBytes(command.byteArray, sizeof(command.byteArray));
 
-    // Serial.print(command.value.cmd); Serial.print("\t");
-    // Serial.print(command.value.bpm); Serial.print("\t");
-    // Serial.print(command.value.spo2); Serial.print("\t");
-    // Serial.println("done");
+    Serial.print(command.value.cmd);
+    Serial.print("\t");
+    Serial.print(command.value.bpm);
+    Serial.print("\t");
+    Serial.print(command.value.spo2);
+    Serial.print("\t");
+    Serial.println("done");
 
-    if (command.value.cmd = 'D') {
-      send_sms(device2_number, "Bahaya");
-      send_sms(doctor_number, "Bahaya");
-    }
-    else if (command.value.cmd = 'W') {
-      send_sms(device2_number, "Waspada");
-      send_sms(doctor_number, "Waspada");
+    if (command.value.cmd != 'N') {
+      if (command.value.cmd = 'D') {
+        send_sms(device2_number, "Bahaya");
+        send_sms(doctor_number, "Bahaya");
+      } else if (command.value.cmd = 'W') {
+        send_sms(device2_number, "Waspada");
+        send_sms(doctor_number, "Waspada");
+      }
     }
   }
 
   if (millis() - lastTime > 1000) {
     if (data_available) {
+      _arduino1_.listen();
       _arduino1_.write(sphygmo.byteArray, sizeof(sphygmo.byteArray));
     }
     data_available = 0;
@@ -100,7 +105,7 @@ void send_sms(String number, String message) {
   updateSerial();
   _gsm.println("AT+CMGF=1");
   updateSerial();
-  _gsm.print("AT+CMGS=\"" + number + "\"");
+  _gsm.print("AT+CMGS=\"" + number + "\"\r");
   updateSerial();
   _gsm.print("Status: " + message + "\n\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(command.value.bpm));
   updateSerial();
