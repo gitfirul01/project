@@ -8,17 +8,36 @@
 #include <Wire.h>
 #include <SoftwareSerial.h>
 
-SoftwareSerial _port1(10, 11);
+#define device1_number "081328431180"
+#define device2_number "081328431160"
+#define doctor_number "08xxxxxxxxx"
 
-typedef struct data_ {
+SoftwareSerial _arduino1_(10, 11);
+SoftwareSerial _gsm(8, 9);
+
+// data to send
+struct data_1 {
   int sys;
   int dias;
 };
-typedef union packet_ {
-  data_ value;
-  byte byteArray[sizeof(data_)];
+union packet_1 {
+  data_1 value;
+  byte byteArray[sizeof(data_1)];
 };
-packet_ sphygmo;
+packet_1 sphygmo;
+
+// data to receive
+struct data_2 {
+  int spo2;
+  int bpm;
+  char cmd;
+};
+union packet_2 {
+  data_2 value;
+  byte byteArray[sizeof(data_2)];
+};
+packet_2 command;
+
 
 bool bPrint = 0;
 int count, countT;
@@ -27,30 +46,74 @@ char buff[30];
 bool data_available;
 long lastTime;
 
+
+
 void setup() {
   Serial.begin(9600);
-  _port1.begin(9600);
+  _arduino1_.begin(9600);
+  _gsm.begin(2400);
+
   delay(500);
+  _gsm.println("AT");
 
   Wire.begin(0x50);
   Wire.onReceive(receiveEvent);
-
-  // Serial.println("done");
-//   sphygmo.value.sys = 0;
-// sphygmo.value.dias = 0;
 }
 
+
+
 void loop() {
+  _arduino1_.listen();
+  while (_arduino1_.available()) {
+    _arduino1_.readBytes(command.byteArray, sizeof(command.byteArray));
+
+    // Serial.print(command.value.cmd); Serial.print("\t");
+    // Serial.print(command.value.bpm); Serial.print("\t");
+    // Serial.print(command.value.spo2); Serial.print("\t");
+    // Serial.println("done");
+
+    if (command.value.cmd = 'D') {
+      send_sms(device2_number, "Bahaya");
+      send_sms(doctor_number, "Bahaya");
+    }
+    else if (command.value.cmd = 'W') {
+      send_sms(device2_number, "Waspada");
+      send_sms(doctor_number, "Waspada");
+    }
+  }
+
   if (millis() - lastTime > 1000) {
     if (data_available) {
-      _port1.write(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+      _arduino1_.write(sphygmo.byteArray, sizeof(sphygmo.byteArray));
     }
     data_available = 0;
 
-// sphygmo.value.sys++;
-// sphygmo.value.dias++;
-
     lastTime = millis();
+  }
+}
+
+
+
+void send_sms(String number, String message) {
+  _gsm.listen();
+  _gsm.println("AT");
+  updateSerial();
+  _gsm.println("AT+CMGF=1");
+  updateSerial();
+  _gsm.print("AT+CMGS=\"" + number + "\"");
+  updateSerial();
+  _gsm.print("Status: " + message + "\n\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(command.value.bpm));
+  updateSerial();
+  _gsm.write(26);
+}
+
+void updateSerial() {
+  delay(500);
+  while (Serial.available()) {
+    _gsm.write(Serial.read());
+  }
+  while (_gsm.available()) {
+    Serial.write(_gsm.read());
   }
 }
 
