@@ -2,7 +2,7 @@
 #include <SoftwareSerial.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <EEPROM.h>
+// #include <EEPROM.h>
 #include <avr/sleep.h>
 
 #include "MAX30102.h"
@@ -18,8 +18,8 @@
 #define SCREEN_ADDRESS 0x3C
 #define SPHYGMO_ADDRESS 0x50
 
-#define send_btn 2
-#define back_btn 3
+#define select_btn 2
+#define change_btn 3
 #define BEAT_LED LED_BUILTIN
 #define OPTIONS 7
 
@@ -80,22 +80,22 @@ union packet_2 {
 };
 packet_2 command;
 
-
-int state;
+// flow control
+int page, menu = 1;
 int risk;
 bool led_on = false;
 bool data_available = false;
-
+// variable control
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
-
+// time control
 long now = 0;
 long lastTime = 0, lastBeat = 0;
-
-bool filter_for_graph = false;
-bool draw_Red = false;
+//
+// bool filter_for_graph = false;
+// bool draw_Red = false;
 uint8_t sleep_counter = 0;
-
+// class object
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 SoftwareSerial _arduino2_(10, 11);
 MAX30102 sensor;
@@ -109,10 +109,12 @@ void setup() {
   Serial.begin(9600);
   _arduino2_.begin(9600);
 
+  pinMode(change_btn, INPUT);
+  pinMode(select_btn, INPUT);
   pinMode(BEAT_LED, OUTPUT);
 
-  filter_for_graph = EEPROM.read(OPTIONS);
-  draw_Red = EEPROM.read(OPTIONS + 1);
+  // filter_for_graph = EEPROM.read(OPTIONS);
+  // draw_Red = EEPROM.read(OPTIONS + 1);
 
   /* begin SSD1306 */
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -130,12 +132,12 @@ void setup() {
 
   /* begin MAX30102 */
   if (!sensor.begin())
-    state = 0;
-  else state = 2;
+    page = 0;
+  else page = 2;
   sensor.setup();
 
-  attachInterrupt(digitalPinToInterrupt(back_btn), back_isr, FALLING);
-  attachInterrupt(digitalPinToInterrupt(send_btn), send_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(change_btn), change_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(select_btn), select_isr, FALLING);
 }
 
 
@@ -152,33 +154,39 @@ void loop() {
 
 
 
-void back_isr() {
-  if (state == 4) {
-    risk = 0;
-    state = 2;
+void change_isr() {
+  if (page == 4) {
+    menu++;
+    if (menu > 2) menu = 1;
   }
 }
 
-void send_isr() {
-  if (state == 4) {
-    command.value.bpm = beatAvg;
-    command.value.spo2 = SPO2;
+void select_isr() {
+  if (page == 4) {
+    if (menu == 1) {
+      risk = 0;
+      page = 2;
+    } else if (menu == 2) {
+      command.value.bpm = beatAvg;
+      command.value.spo2 = SPO2;
 
-    if (risk > 2) {
-      command.value.cmd = 'D';
-    } else if (risk == 2) {
-      command.value.cmd = 'W';
-    } else command.value.cmd = 'n';
+      if (risk > 2) {
+        command.value.cmd = 'D';
+      } else if (risk == 2) {
+        command.value.cmd = 'W';
+      } else command.value.cmd = 'n';
 
-    _arduino2_.write(command.byteArray, sizeof(command.byteArray));
+      _arduino2_.write(command.byteArray, sizeof(command.byteArray));
 
-    // Serial.print(command.value.cmd); Serial.print("\t");
-    // Serial.print(command.value.bpm); Serial.print("\t");
-    // Serial.print(command.value.spo2); Serial.print("\t");
-    // Serial.println("done");
+      // Serial.print(command.value.cmd); Serial.print("\t");
+      // Serial.print(command.value.bpm); Serial.print("\t");
+      // Serial.print(command.value.spo2); Serial.print("\t");
+      // Serial.println("done");
 
-    risk = 0;
-    state = 2;
+      risk = 0;
+      page = 2;
+    }
+    menu == 1;
   }
 }
 
@@ -208,7 +216,7 @@ void __max30102__() {
   sensor.nextSample();
 
   if (irValue < 50000) {
-    state = (state == 4 ? 4 : (sleep_counter <= 100 ? 1 : 3));
+    page = (page == 4 ? 4 : (sleep_counter <= 100 ? 1 : 3));
     delay(100);
     ++sleep_counter;
     if (sleep_counter > 150) {
@@ -216,29 +224,30 @@ void __max30102__() {
       sleep_counter = 0;
     }
   } else {
-    state = (state == 4 ? 4 : 2);
+    page = (page == 4 ? 4 : 2);
     sleep_counter = 0;
     int16_t IR_signal, Red_signal;
     bool beatRed, beatIR;
-    if (!filter_for_graph) {
+    // if (!filter_for_graph) {
       IR_signal = pulseIR.dc_filter(irValue);
       Red_signal = pulseRed.dc_filter(redValue);
       beatRed = pulseRed.isBeat(pulseRed.ma_filter(Red_signal));
       beatIR = pulseIR.isBeat(pulseIR.ma_filter(IR_signal));
-    } else {
-      IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
-      Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
-      beatRed = pulseRed.isBeat(Red_signal);
-      beatIR = pulseIR.isBeat(IR_signal);
-    }
+    // } else {
+    //   IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
+    //   Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
+    //   beatRed = pulseRed.isBeat(Red_signal);
+    //   beatIR = pulseIR.isBeat(IR_signal);
+    // }
     // check IR or Red for heartbeat
-    if (draw_Red ? beatRed : beatIR) {
+    if (beatIR) {
+    // if (draw_Red ? beatRed : beatIR) {
       long btpm = 60000 / (now - lastBeat);
       if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
       lastBeat = now;
       digitalWrite(BEAT_LED, HIGH);
       //
-      if (state == 2) {
+      if (page == 2) {
         display.clearDisplay();
         display.drawBitmap(0, 0, logo3_bmp, 32, 32, WHITE);
         display.setTextSize(2);
@@ -281,7 +290,7 @@ void __max30102__() {
 
 void __ssd1306__() {
   display.clearDisplay();
-  switch (state) {
+  switch (page) {
     case 0:
       display.setTextSize(1);
       display.setCursor(0, 0);
@@ -335,21 +344,33 @@ void __ssd1306__() {
     case 4:  // condition interface
       display.setTextSize(1);
       display.setCursor(0, 0);
+
       if (risk == 0) {
         display.println(F("Normal"));
-      } else if (risk == 1) {
-        display.println(F("Normal"));
-        display.println(F("ulangi pengamatan dalam 30 menit"));
-      } else if (risk == 2) {
-        display.println(F("Waspada"));
-        display.println(F("panggil dokter kandungan dan"));
-        display.println(F("ulangi pengamatan dalam 30 menit"));
-      } else if (risk > 2) {
-        display.println(F("Bahaya"));
-        display.println(F("peninjauan segera oleh dokter kandungan"));
-        display.println(F("dan observasi ulang dalam 15 menit"));
-        display.println(F("atau pemantauan terus menerus"));
       }
+      if (risk == 1) {
+        display.println(F("Normal"));
+        // display.println(F("ulangi pengamatan dalam 30 menit"));
+      }
+      if (risk == 2) {
+        display.println(F("Waspada"));
+        // display.println(F("panggil dokter kandungan dan"));
+        // display.println(F("ulangi pengamatan dalam 30 menit"));
+      }
+      if (risk > 2) {
+        display.println(F("Bahaya"));
+        // display.println(F("peninjauan segera oleh dokter kandungan"));
+        // display.println(F("dan observasi ulang dalam 15 menit"));
+        // display.println(F("atau pemantauan terus menerus"));
+      }
+
+      display.setCursor(0, 32);
+      if (menu == 1) display.println(F("> Send"));
+      else display.println(F("  Send"));
+
+      if (menu == 2) display.println(F("> Back"));
+      else display.println(F("  Back"));
+
       break;
   }
   display.display();
@@ -374,8 +395,8 @@ void __check_condition__() {
     if ((beatAvg < 40) || (beatAvg > 120)) risk += 2;
     else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) risk += 1;
 
-    state = 4;
+    page = 4;
     data_available = false;
-    delay(5000);
+    // delay(5000);
   }
 }
