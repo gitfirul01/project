@@ -82,7 +82,7 @@ packet_2 command;
 
 // flow control
 int page, menu = 1;
-int risk;
+int risk, count;
 bool led_on = false;
 bool data_available = false;
 // variable control
@@ -163,10 +163,7 @@ void change_isr() {
 
 void select_isr() {
   if (page == 4) {
-    if (menu == 1) {
-      risk = 0;
-      page = 2;
-    } else if (menu == 2) {
+    if (menu == 2) {
       command.value.spo2 = SPO2;
 
       if (risk > 2) {
@@ -181,11 +178,11 @@ void select_isr() {
       // Serial.print(command.value.bpm); Serial.print("\t");
       // Serial.print(command.value.spo2); Serial.print("\t");
       // Serial.println("done");
-
-      risk = 0;
-      page = 2;
     }
-    menu == 1;
+    risk = 0;
+    page = 2;
+    menu = 1;
+    count = 0;
   }
 }
 
@@ -266,6 +263,8 @@ void __max30102__() {
         display.setCursor(5, 55);
         display.print(F("Diastole: "));
         display.print(sphygmo.value.dias);
+        display.setCursor(115, 55);
+        display.print(count);
         display.display();
       }
       //
@@ -307,8 +306,9 @@ void __ssd1306__() {
     case 2:
       /* Waiting data from tensimeter */
       if (_arduino2_.available()) {
-        data_available = true;
         _arduino2_.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+        // data_available = true;
+        count++;
       }
       display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
       display.setTextSize(2);
@@ -330,6 +330,8 @@ void __ssd1306__() {
       display.print(F("Diastole: "));
       display.setCursor(65, 55);
       display.print(sphygmo.value.dias);
+      display.setCursor(115, 55);
+      display.print(count);
 
       break;
     case 3:
@@ -382,7 +384,7 @@ void __check_condition__() {
    * risk = 1: warn
    * risk = 2: danger
    */
-  if (data_available) {
+  if (count == 2) {
     if (SPO2 < 95) risk += 2;
 
     if ((sphygmo.value.sys < 90) || (sphygmo.value.sys > 180)) risk += 2;
@@ -395,7 +397,7 @@ void __check_condition__() {
     else if (((40 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 50)) || ((100 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 120))) risk += 1;
 
     page = 4;
-    data_available = false;
+    // data_available = false;
     // delay(5000);
   }
 }
