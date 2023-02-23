@@ -2,7 +2,6 @@
 #include <SoftwareSerial.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-// #include <EEPROM.h>
 #include <avr/sleep.h>
 
 #include "MAX30102.h"
@@ -17,11 +16,12 @@
 
 #define SCREEN_ADDRESS 0x3C
 #define SPHYGMO_ADDRESS 0x50
+#define max_measurement 3
 
-#define select_btn 2
-#define change_btn 3
 #define BEAT_LED LED_BUILTIN
-#define OPTIONS 7
+#define select_btn_pin 2
+#define change_btn_pin 3
+#define tensimeter_pin 9
 
 //spo2_table is approximated as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
 const uint8_t spo2_table[184] PROGMEM = { 95, 95, 95, 96, 96, 96, 97, 97, 97, 97, 97, 98, 98, 98, 98, 98, 99, 99, 99, 99,
@@ -80,22 +80,28 @@ union packet_2 {
 };
 packet_2 command;
 
-// flow control
-int page, menu = 1;
-int risk, count;
-bool led_on = false;
-bool data_available = false;
-// variable control
+
+int risk;
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
-// time control
+
+int page;
+int menu = 1;
+
+bool led_on = false;
+bool tensimeter_on = false;
+
 long now = 0;
 long lastTime = 0, lastBeat = 0;
-//
-// bool filter_for_graph = false;
-// bool draw_Red = false;
 uint8_t sleep_counter = 0;
-// class object
+
+int measurement_counter = 0;     // sudah berapa kali pengukuran
+int measurement_countdown = 60;  // countdown sebelum pengukuran berikutnya
+long start_measurement_count = 0;
+long last_measurement_count = 0;
+
+
+
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 SoftwareSerial _arduino2_(10, 11);
 MAX30102 sensor;
@@ -109,12 +115,12 @@ void setup() {
   Serial.begin(9600);
   _arduino2_.begin(9600);
 
-  pinMode(change_btn, INPUT);
-  pinMode(select_btn, INPUT);
+  pinMode(change_btn_pin, INPUT);
+  pinMode(select_btn_pin, INPUT);
   pinMode(BEAT_LED, OUTPUT);
+  pinMode(tensimeter_pin, OUTPUT);
 
-  // filter_for_graph = EEPROM.read(OPTIONS);
-  // draw_Red = EEPROM.read(OPTIONS + 1);
+  digitalWrite(tensimeter_pin, HIGH);  // tensimeter off -> low trigger
 
   /* begin SSD1306 */
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -136,16 +142,45 @@ void setup() {
   else page = 2;
   sensor.setup();
 
-  attachInterrupt(digitalPinToInterrupt(change_btn), change_isr, FALLING);
-  attachInterrupt(digitalPinToInterrupt(select_btn), select_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(change_btn_pin), change_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(select_btn_pin), select_isr, FALLING);
 }
 
 
 
 void loop() {
   now = millis();
+  /* Read SPO2 and BPM continuously */
   __max30102__();
 
+  /* Waiting data from tensimeter */
+  if (_arduino2_.available()) {
+    _arduino2_.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+    tensimeter_on = false;
+    measurement_countdown = 60;
+    measurement_counter++;
+
+    digitalWrite(tensimeter_pin, LOW);  // reset tensimeter
+    delay(300);
+    digitalWrite(tensimeter_pin, HIGH);
+  }
+
+  if ((measurement_counter > 0 && measurement_counter <= max_measurement) && tensimeter_on == false) {
+    start_measurement_count = millis();
+    if (start_measurement_count - last_measurement_count >= 1000) {
+      measurement_countdown--;
+      last_measurement_count = start_measurement_count;
+    }
+    if (measurement_countdown == 0) {
+      tensimeter_on = true;
+
+      digitalWrite(tensimeter_pin, LOW);  // trigger tensimeter
+      delay(300);
+      digitalWrite(tensimeter_pin, HIGH);
+    }
+  }
+
+  /* Display */
   if (now - lastTime > 300) {
     __check_condition__();
     __ssd1306__();
@@ -163,7 +198,7 @@ void change_isr() {
 
 void select_isr() {
   if (page == 4) {
-    if (menu == 2) {
+    if (menu == 1) {
       command.value.spo2 = SPO2;
 
       if (risk > 2) {
@@ -182,7 +217,6 @@ void select_isr() {
     risk = 0;
     page = 2;
     menu = 1;
-    count = 0;
   }
 }
 
@@ -211,7 +245,7 @@ void __max30102__() {
   uint32_t redValue = sensor.getRed();
   sensor.nextSample();
 
-  if (irValue < 50000) {
+  if (irValue < 5000) {
     page = (page == 4 ? 4 : (sleep_counter <= 100 ? 1 : 3));
     delay(100);
     ++sleep_counter;
@@ -263,8 +297,11 @@ void __max30102__() {
         display.setCursor(5, 55);
         display.print(F("Diastole: "));
         display.print(sphygmo.value.dias);
-        display.setCursor(115, 55);
-        display.print(count);
+
+        display.setCursor(100, 55);
+        display.print(measurement_counter);
+        display.print("/");
+        display.print(measurement_countdown);
         display.display();
       }
       //
@@ -304,12 +341,6 @@ void __ssd1306__() {
 
       break;
     case 2:
-      /* Waiting data from tensimeter */
-      if (_arduino2_.available()) {
-        _arduino2_.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
-        // data_available = true;
-        count++;
-      }
       display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
       display.setTextSize(2);
       display.setCursor(42, 15);
@@ -330,8 +361,11 @@ void __ssd1306__() {
       display.print(F("Diastole: "));
       display.setCursor(65, 55);
       display.print(sphygmo.value.dias);
-      display.setCursor(115, 55);
-      display.print(count);
+
+      display.setCursor(100, 55);
+      display.print(measurement_counter);
+      display.print("/");
+      display.print(measurement_countdown);
 
       break;
     case 3:
@@ -384,7 +418,7 @@ void __check_condition__() {
    * risk = 1: warn
    * risk = 2: danger
    */
-  if (count == 2) {
+  if (measurement_counter == max_measurement) {
     if (SPO2 < 95) risk += 2;
 
     if ((sphygmo.value.sys < 90) || (sphygmo.value.sys > 180)) risk += 2;
@@ -397,7 +431,6 @@ void __check_condition__() {
     else if (((40 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 50)) || ((100 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 120))) risk += 1;
 
     page = 4;
-    // data_available = false;
-    // delay(5000);
+    measurement_counter = 0;
   }
 }
