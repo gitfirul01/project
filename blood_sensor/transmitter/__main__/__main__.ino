@@ -61,6 +61,7 @@ static const unsigned char PROGMEM logo3_bmp[] = {
 struct data_1 {
   int sys;
   int dias;
+  int bpm;
 };
 union packet_1 {
   data_1 value;
@@ -71,7 +72,6 @@ packet_1 sphygmo;
 // data to send
 struct data_2 {
   int spo2;
-  int bpm;
   char cmd;
 };
 union packet_2 {
@@ -167,7 +167,6 @@ void select_isr() {
       risk = 0;
       page = 2;
     } else if (menu == 2) {
-      command.value.bpm = beatAvg;
       command.value.spo2 = SPO2;
 
       if (risk > 2) {
@@ -229,10 +228,10 @@ void __max30102__() {
     int16_t IR_signal, Red_signal;
     bool beatRed, beatIR;
     // if (!filter_for_graph) {
-      IR_signal = pulseIR.dc_filter(irValue);
-      Red_signal = pulseRed.dc_filter(redValue);
-      beatRed = pulseRed.isBeat(pulseRed.ma_filter(Red_signal));
-      beatIR = pulseIR.isBeat(pulseIR.ma_filter(IR_signal));
+    IR_signal = pulseIR.dc_filter(irValue);
+    Red_signal = pulseRed.dc_filter(redValue);
+    beatRed = pulseRed.isBeat(pulseRed.ma_filter(Red_signal));
+    beatIR = pulseIR.isBeat(pulseIR.ma_filter(IR_signal));
     // } else {
     //   IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
     //   Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
@@ -241,7 +240,7 @@ void __max30102__() {
     // }
     // check IR or Red for heartbeat
     if (beatIR) {
-    // if (draw_Red ? beatRed : beatIR) {
+      // if (draw_Red ? beatRed : beatIR) {
       long btpm = 60000 / (now - lastBeat);
       if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
       lastBeat = now;
@@ -392,8 +391,8 @@ void __check_condition__() {
     if (sphygmo.value.dias > 120) risk += 2;
     else if ((100 <= sphygmo.value.dias) && (sphygmo.value.dias <= 120)) risk += 1;
 
-    if ((beatAvg < 40) || (beatAvg > 120)) risk += 2;
-    else if (((40 <= beatAvg) && (beatAvg <= 50)) || ((100 <= beatAvg) && (beatAvg <= 120))) risk += 1;
+    if ((sphygmo.value.bpm < 40) || (sphygmo.value.bpm > 120)) risk += 2;
+    else if (((40 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 50)) || ((100 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 120))) risk += 1;
 
     page = 4;
     data_available = false;
