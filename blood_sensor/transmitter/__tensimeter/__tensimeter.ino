@@ -19,6 +19,7 @@ SoftwareSerial _gsm(8, 9);
 struct data_1 {
   int sys;
   int dias;
+  int bpm;
 };
 union packet_1 {
   data_1 value;
@@ -29,7 +30,6 @@ packet_1 sphygmo;
 // data to receive
 struct data_2 {
   int spo2;
-  int bpm;
   char cmd;
 };
 union packet_2 {
@@ -69,19 +69,19 @@ void loop() {
 
     Serial.print(command.value.cmd);
     Serial.print("\t");
-    Serial.print(command.value.bpm);
-    Serial.print("\t");
     Serial.print(command.value.spo2);
     Serial.print("\t");
     Serial.println("done");
 
     if (command.value.cmd != 'N') {
       if (command.value.cmd = 'D') {
-        send_sms(device2_number, "Bahaya");
-        send_sms(doctor_number, "Bahaya");
+        // send_sms(device2_number, "Bahaya");
+        // send_sms(doctor_number, "Bahaya");
+        call(doctor_number);
       } else if (command.value.cmd = 'W') {
-        send_sms(device2_number, "Waspada");
-        send_sms(doctor_number, "Waspada");
+        // send_sms(device2_number, "Waspada");
+        // send_sms(doctor_number, "Waspada");
+        call(doctor_number);
       }
     }
   }
@@ -107,9 +107,17 @@ void send_sms(String number, String message) {
   updateSerial();
   _gsm.print("AT+CMGS=\"" + number + "\"\r");
   updateSerial();
-  _gsm.print("Status: " + message + "\n\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(command.value.bpm));
+  _gsm.print("Status: " + message + "\n\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(sphygmo.value.bpm));
   updateSerial();
   _gsm.write(26);
+}
+
+void call(String number) {
+  _gsm.println("ATD" + number + ";");
+  updateSerial();
+  delay(20000);
+  _gsm.println("ATH");
+  updateSerial();
 }
 
 void updateSerial() {
@@ -145,9 +153,9 @@ void receiveEvent(int howMany) {
       } else if (count == 1) {
         sphygmo.value.dias = c;
       }
-      // else {
-      //   sphygmo.value.bpm = c;
-      // }
+      else {
+        sphygmo.value.bpm = c;
+      }
       count++;
       if (count == 3) {
         // sprintf(buff, "sys:%d, dias:%d, bpm:%d", sphygmo.value.sys, sphygmo.value.dias, sphygmo.value.bpm);
