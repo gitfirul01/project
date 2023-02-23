@@ -2,7 +2,7 @@
 #include <SoftwareSerial.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <EEPROM.h>
+// #include <EEPROM.h>
 #include <avr/sleep.h>
 
 #include "MAX30102.h"
@@ -92,8 +92,8 @@ int SPO2 = 0, SPO2f = 0;
 long now = 0;
 long lastTime = 0, lastBeat = 0;
 //
-bool filter_for_graph = false;
-bool draw_Red = false;
+// bool filter_for_graph = false;
+// bool draw_Red = false;
 uint8_t sleep_counter = 0;
 // class object
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
@@ -113,8 +113,8 @@ void setup() {
   pinMode(select_btn, INPUT);
   pinMode(BEAT_LED, OUTPUT);
 
-  filter_for_graph = EEPROM.read(OPTIONS);
-  draw_Red = EEPROM.read(OPTIONS + 1);
+  // filter_for_graph = EEPROM.read(OPTIONS);
+  // draw_Red = EEPROM.read(OPTIONS + 1);
 
   /* begin SSD1306 */
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -228,19 +228,20 @@ void __max30102__() {
     sleep_counter = 0;
     int16_t IR_signal, Red_signal;
     bool beatRed, beatIR;
-    if (!filter_for_graph) {
+    // if (!filter_for_graph) {
       IR_signal = pulseIR.dc_filter(irValue);
       Red_signal = pulseRed.dc_filter(redValue);
       beatRed = pulseRed.isBeat(pulseRed.ma_filter(Red_signal));
       beatIR = pulseIR.isBeat(pulseIR.ma_filter(IR_signal));
-    } else {
-      IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
-      Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
-      beatRed = pulseRed.isBeat(Red_signal);
-      beatIR = pulseIR.isBeat(IR_signal);
-    }
+    // } else {
+    //   IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
+    //   Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
+    //   beatRed = pulseRed.isBeat(Red_signal);
+    //   beatIR = pulseIR.isBeat(IR_signal);
+    // }
     // check IR or Red for heartbeat
-    if (draw_Red ? beatRed : beatIR) {
+    if (beatIR) {
+    // if (draw_Red ? beatRed : beatIR) {
       long btpm = 60000 / (now - lastBeat);
       if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
       lastBeat = now;
@@ -396,6 +397,6 @@ void __check_condition__() {
 
     page = 4;
     data_available = false;
-    delay(5000);
+    // delay(5000);
   }
 }
