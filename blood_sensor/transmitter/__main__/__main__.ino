@@ -103,6 +103,7 @@ int measurement_countdown = 60;    // countdown sebelum pengukuran berikutnya
 long start_measurement_count = 0;  // variabel waktu millis
 long last_measurement_count = 0;   // variabel waktu millis
 
+bool msg_sent = false;
 
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
@@ -197,19 +198,6 @@ void loop() {
   if (now - lastTime > 300) {
     __check_condition__();
     __ssd1306__();
-
-    // Serial.print("tensimeter_on"); Serial.print("\t:"); Serial.println(tensimeter_on);
-    Serial.print("repeat_flag");
-    Serial.print("\t:");
-    Serial.println(repeat_flag);
-    Serial.print("on_repeat");
-    Serial.print("\t:");
-    Serial.println(on_repeat);
-    Serial.print("repeat_countdown");
-    Serial.print("\t:");
-    Serial.println(repeat_countdown);
-    // Serial.print("measurement_counter"); Serial.print("\t:"); Serial.println(measurement_counter);
-    // Serial.print("measurement_countdown"); Serial.print("\t:"); Serial.println(measurement_countdown);
   }
 }
 
@@ -224,15 +212,19 @@ void change_isr() {
 
 void select_isr() {
   if (page == 4) {
-    if (menu == 1) {  // jika menu send terpilih
-      command.value.spo2 = SPO2;
-      _arduino2_.write(command.byteArray, sizeof(command.byteArray));
-
+    if (menu == 1) {                                                     // jika menu send terpilih
+      if (!msg_sent) {                                                   // jika belum pernah kirim pesan
+        command.value.spo2 = SPO2;                                       //
+        _arduino2_.write(command.byteArray, sizeof(command.byteArray));  // maka kirim pesan
+      } else {                                                           // jika sudah pernah kirim pesan,
+        msg_sent = false;                                                // maka matikan flag
+      }
       // Serial.print(command.value.cmd); Serial.print("\t");
       // Serial.print(command.value.bpm); Serial.print("\t");
       // Serial.print(command.value.spo2); Serial.print("\t");
       // Serial.println("done");
     }
+    if (on_repeat) on_repeat = false;
     risk = 0;
     page = 2;
     menu = 1;
@@ -416,32 +408,28 @@ void __ssd1306__() {
       display.setCursor(0, 0);
 
       if (risk == 0) {
-        display.println(F("Normal"));
-        command.value.cmd = 'n';  // normal
+        display.println(F("Normal [0]"));  // pesan pada LCD
+        command.value.cmd = 'n';           // normal
         repeat_flag = false;
-
-      } else if (risk == 1) {
-        display.println(F("Normal"));
-        command.value.cmd = 'N';  // normal, dengan peringatan
-        if (!on_repeat) {         // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
-          repeat_flag = true;     // maka lakukan repeat
+      } else {
+        if (risk == 1) {
+          display.println(F("Normal [1]"));  // pesan pada LCD
+          command.value.cmd = 'N';           // normal, dengan peringatan
+        } else if (risk == 2) {
+          display.println(F("Waspada [2]"));  // pesan pada LCD
+          command.value.cmd = 'W';            // warning
+        } else if (risk > 2) {
+          display.println("Bahaya [" + String(risk) + "]");  // pesan pada LCD
+          command.value.cmd = 'D';                      // danger
         }
-
-      } else if (risk == 2) {
-        display.println(F("Waspada"));
-        command.value.cmd = 'W';  // warning
-        if (!on_repeat) {         // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
-          repeat_flag = true;     // maka lakukan repeat
-        }
-
-      } else if (risk > 2) {
-        display.println(F("Bahaya"));
-        command.value.cmd = 'D';  // danger
-        if (!on_repeat) {         // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
-          repeat_flag = true;     // maka lakukan repeat
+        if (!on_repeat) {                                                  // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
+          repeat_flag = true;                                              // maka lakukan repeat
+        } else if (!msg_sent) {                                            // jika sudah pernah melakukan repeat, dan belum pernah kirim pesan
+          command.value.spo2 = SPO2;                                       //
+          _arduino2_.write(command.byteArray, sizeof(command.byteArray));  // kirim pesan otomatis
+          msg_sent = true;                                                 // flag pesan terkirim
         }
       }
-
       display.setCursor(0, 32);
       if (menu == 1) display.println(F("> Send"));
       else display.println(F("  Send"));
