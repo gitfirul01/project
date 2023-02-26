@@ -21,7 +21,7 @@ SoftwareSerial SIM900A(gsm_tx, gsm_rx);
 
 
 void setup() {
-  Serial.begin(2400);
+  Serial.begin(9600);
   SIM900A.begin(2400);
 
   pinMode(buz_pin, OUTPUT);
@@ -46,10 +46,10 @@ void setup() {
   // SIM900A.write(26); // send ASCII character of <CTRL+Z>, or 0x1A
 
   // RECEIVE SMS
-  // SIM900A.println("AT+CMGF=1"); updateSerial();
-  // SIM900A.println("AT+CNMI=1,2,0,0,0"); updateSerial();
+  SIM900A.println("AT+CMGF=1"); updateSerial();
+  SIM900A.println("AT+CNMI=1,2,0,0,0"); updateSerial();
 
-  http_post();
+  // http_post();
   // cip_post();
 
   //  MAKE A CALL
@@ -98,96 +98,96 @@ void updateSerial() {
 }
 
 
-void http_post() {
-  String nama = "-";
-  String tanggallahir = "-";
-  String paritas = "100";
-  String sistol = "111";
-  String diastol = "222";
-  String nadi = "333";
-  String saturasioksigen = "444";
+// void http_post() {
+//   String nama = "-";
+//   String tanggallahir = "-";
+//   String paritas = "100";
+//   String sistol = "111";
+//   String diastol = "222";
+//   String nadi = "333";
+//   String saturasioksigen = "444";
 
-  String sendtoserver;
-  sendtoserver += "nama=";
-  sendtoserver += nama;
-  sendtoserver += "&tanggallahir=";
-  sendtoserver += tanggallahir;
-  sendtoserver += "&paritas=";
-  sendtoserver += paritas;
-  sendtoserver += "&sistol=";
-  sendtoserver += sistol;
-  sendtoserver += "&diastol=";
-  sendtoserver += diastol;
-  sendtoserver += "&nadi=";
-  sendtoserver += nadi;
-  sendtoserver += "&saturasioksigen=";
-  sendtoserver += saturasioksigen;
+//   String sendtoserver;
+//   sendtoserver += "nama=";
+//   sendtoserver += nama;
+//   sendtoserver += "&tanggallahir=";
+//   sendtoserver += tanggallahir;
+//   sendtoserver += "&paritas=";
+//   sendtoserver += paritas;
+//   sendtoserver += "&sistol=";
+//   sendtoserver += sistol;
+//   sendtoserver += "&diastol=";
+//   sendtoserver += diastol;
+//   sendtoserver += "&nadi=";
+//   sendtoserver += nadi;
+//   sendtoserver += "&saturasioksigen=";
+//   sendtoserver += saturasioksigen;
 
-  SIM900A.println("AT");
-  delay(500);
+//   SIM900A.println("AT");
+//   delay(500);
 
-  SIM900A.println("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"");  // Connection type GPRS
-  delay(2000);
-  updateSerial();
+//   SIM900A.println("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"");  // Connection type GPRS
+//   delay(2000);
+//   updateSerial();
 
-  SIM900A.println("AT+SAPBR=3,1,\"APN\",\"indosatgprs\"");  // APN of the provider
-  delay(3000);
-  updateSerial();
+//   SIM900A.println("AT+SAPBR=3,1,\"APN\",\"indosatgprs\"");  // APN of the provider
+//   delay(3000);
+//   updateSerial();
 
-  SIM900A.println("AT+SAPBR=1,1");  // Open GPRS context
-  delay(3000);
-  updateSerial();
+//   SIM900A.println("AT+SAPBR=1,1");  // Open GPRS context
+//   delay(3000);
+//   updateSerial();
 
-  SIM900A.println("AT+SAPBR=2,1");  // Query the GPRS context
-  delay(3000);
-  updateSerial();
+//   SIM900A.println("AT+SAPBR=2,1");  // Query the GPRS context
+//   delay(3000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPINIT");  // Initialize HTTP service
-  delay(3000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPINIT");  // Initialize HTTP service
+//   delay(3000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPPARA=\"CID\",1");  // Set parameters for HTTP session
-  delay(3000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPPARA=\"CID\",1");  // Set parameters for HTTP session
+//   delay(3000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPPARA=\"URL\",\"http://vitalsign.sogydevelop.com/datakirim\"");  // Server address, PAKAI "http", TIDAK SUPPORT "https"
-  delay(5000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPPARA=\"URL\",\"http://vitalsign.sogydevelop.com/datakirim\"");  // Server address, PAKAI "http", TIDAK SUPPORT "https"
+//   delay(5000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPPARA=\"CONTENT\",\"application/x-www-form-urlencoded\"");
-  delay(5000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPPARA=\"CONTENT\",\"application/x-www-form-urlencoded\"");
+//   delay(5000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPPARA=\"USERDATA\",\"Authorization: Bearer YWRtaW4xMjM0NToxMjM0NTY3OA==\"");  // Bearer token
-  delay(5000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPPARA=\"USERDATA\",\"Authorization: Bearer YWRtaW4xMjM0NToxMjM0NTY3OA==\"");  // Bearer token
+//   delay(5000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPDATA=" + String(sendtoserver.length()) + ",100000");  // POST data of certain size with maximum latency time of 10seconds for inputting the data
-  Serial.println(sendtoserver);
-  delay(5000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPDATA=" + String(sendtoserver.length()) + ",100000");  // POST data of certain size with maximum latency time of 10seconds for inputting the data
+//   Serial.println(sendtoserver);
+//   delay(5000);
+//   updateSerial();
 
-  SIM900A.println(sendtoserver);  // Data to be sent
-  delay(5000);
-  updateSerial();
+//   SIM900A.println(sendtoserver);  // Data to be sent
+//   delay(5000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPACTION=1");  // Start POST session
-  delay(5000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPACTION=1");  // Start POST session
+//   delay(5000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPREAD");
-  delay(3000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPREAD");
+//   delay(3000);
+//   updateSerial();
 
-  SIM900A.println("AT+HTTPTERM");  // Terminate HTTP service
-  delay(3000);
-  updateSerial();
+//   SIM900A.println("AT+HTTPTERM");  // Terminate HTTP service
+//   delay(3000);
+//   updateSerial();
 
-  SIM900A.println("AT+SAPBR=0,1");  // Close GPRS context
-  delay(3000);
-  updateSerial();
-  delay(2000);
-}
+//   SIM900A.println("AT+SAPBR=0,1");  // Close GPRS context
+//   delay(3000);
+//   updateSerial();
+//   delay(2000);
+// }
 
 // void cip_post() {
 //   String nama = "ucup";
