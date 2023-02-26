@@ -13,7 +13,7 @@
 #define doctor_number "081228445269"
 
 SoftwareSerial _arduino1_(10, 11);
-SoftwareSerial _gsm(8, 9);
+SoftwareSerial SIM900A(8, 9);
 
 // data to send
 struct data_1 {
@@ -51,10 +51,17 @@ long lastTime;
 void setup() {
   Serial.begin(9600);
   _arduino1_.begin(9600);
-  _gsm.begin(2400);
+  SIM900A.begin(2400);
 
   delay(500);
-  _gsm.println("AT");
+  SIM900A.println("AT");
+  updateSerial();
+  SIM900A.println("AT+CSQ");
+  updateSerial();
+  SIM900A.println("AT+CCID");
+  updateSerial();
+  SIM900A.println("AT+CREG?");
+  updateSerial();
 
   Wire.begin(0x50);
   Wire.onReceive(receiveEvent);
@@ -73,7 +80,7 @@ void loop() {
     Serial.print("\t");
     Serial.println("done");
 
-    if (command.value.cmd != 'N') {
+    if (command.value.cmd != 'n') {
       if (command.value.cmd = 'D') {
         // send_sms(device2_number, "Bahaya");
         // send_sms(doctor_number, "Bahaya");
@@ -82,8 +89,13 @@ void loop() {
         // send_sms(device2_number, "Waspada");
         // send_sms(doctor_number, "Waspada");
         call(doctor_number);
+      } else if (command.value.cmd = 'N') {
+        // send_sms(device2_number, "Normal dengan peringatan");
+        // send_sms(doctor_number, "Normal dengan peringatan");
+        call(doctor_number);
       }
     }
+    http_post();  // kirim data ke website jika ada data masuk dari arduino 1
   }
 
   if (millis() - lastTime > 1000) {
@@ -100,33 +112,35 @@ void loop() {
 
 
 void send_sms(String number, String message) {
-  _gsm.listen();
-  _gsm.println("AT");
+  SIM900A.listen();
+  SIM900A.println("AT");
   updateSerial();
-  _gsm.println("AT+CMGF=1");
+  SIM900A.println("AT+CMGF=1");
   updateSerial();
-  _gsm.print("AT+CMGS=\"" + number + "\"\r");
+  SIM900A.print("AT+CMGS=\"" + number + "\"\r");
   updateSerial();
-  _gsm.print("Status: " + message + "\n\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(sphygmo.value.bpm));
+  SIM900A.print("Status: " + message + "\n\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(sphygmo.value.bpm));
   updateSerial();
-  _gsm.write(26);
+  SIM900A.write(26);
 }
 
 void call(String number) {
-  _gsm.println("ATD" + number + ";");
+  SIM900A.listen();
+  SIM900A.println("ATD" + number + ";");
   updateSerial();
   delay(20000);
-  _gsm.println("ATH");
+  SIM900A.println("ATH");
   updateSerial();
 }
 
 void updateSerial() {
+  SIM900A.listen();
   delay(500);
   while (Serial.available()) {
-    _gsm.write(Serial.read());
+    SIM900A.write(Serial.read());
   }
-  while (_gsm.available()) {
-    Serial.write(_gsm.read());
+  while (SIM900A.available()) {
+    Serial.write(SIM900A.read());
   }
 }
 
@@ -152,8 +166,7 @@ void receiveEvent(int howMany) {
         sphygmo.value.sys = c;
       } else if (count == 1) {
         sphygmo.value.dias = c;
-      }
-      else {
+      } else {
         sphygmo.value.bpm = c;
       }
       count++;
@@ -168,4 +181,88 @@ void receiveEvent(int howMany) {
       }
     }
   }
+}
+
+
+void http_post() {
+  String sendtoserver;
+  sendtoserver += "nama=";
+  sendtoserver += "-";
+  sendtoserver += "&tanggallahir=";
+  sendtoserver += "0000-00-00";  // yyyy-mm-dd
+  sendtoserver += "&paritas=";
+  sendtoserver += "-";
+  sendtoserver += "&sistol=";
+  sendtoserver += sphygmo.value.sys;
+  sendtoserver += "&diastol=";
+  sendtoserver += sphygmo.value.dias;
+  sendtoserver += "&nadi=";
+  sendtoserver += sphygmo.value.bpm;
+  sendtoserver += "&saturasioksigen=";
+  sendtoserver += command.value.spo2;
+
+  SIM900A.println("AT");
+  delay(500);
+
+  SIM900A.println("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"");  // Connection type GPRS
+  delay(2000);
+  updateSerial();
+
+  SIM900A.println("AT+SAPBR=3,1,\"APN\",\"internet\"");  // APN of the provider
+  delay(3000);
+  updateSerial();
+
+  SIM900A.println("AT+SAPBR=1,1");  // Open GPRS context
+  delay(3000);
+  updateSerial();
+
+  SIM900A.println("AT+SAPBR=2,1");  // Query the GPRS context
+  delay(3000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPINIT");  // Initialize HTTP service
+  delay(3000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPPARA=\"CID\",1");  // Set parameters for HTTP session
+  delay(3000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPPARA=\"URL\",\"http://vitalsign.sogydevelop.com/datakirim\"");  // Server address, PAKAI "http", TIDAK SUPPORT "https"
+  delay(5000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPPARA=\"CONTENT\",\"application/x-www-form-urlencoded\"");
+  delay(5000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPPARA=\"USERDATA\",\"Authorization: Bearer YWRtaW4xMjM0NToxMjM0NTY3OA==\"");  // Bearer token
+  delay(5000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPDATA=" + String(sendtoserver.length()) + ",100000");  // POST data of certain size with maximum latency time of 10seconds for inputting the data
+  Serial.println(sendtoserver);
+  delay(5000);
+  updateSerial();
+
+  SIM900A.println(sendtoserver);  // Data to be sent
+  delay(5000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPACTION=1");  // Start POST session
+  delay(5000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPREAD");
+  delay(3000);
+  updateSerial();
+
+  SIM900A.println("AT+HTTPTERM");  // Terminate HTTP service
+  delay(3000);
+  updateSerial();
+
+  SIM900A.println("AT+SAPBR=0,1");  // Close GPRS context
+  delay(3000);
+  updateSerial();
+  delay(2000);
 }
