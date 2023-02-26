@@ -16,7 +16,7 @@
 
 #define SCREEN_ADDRESS 0x3C
 #define SPHYGMO_ADDRESS 0x50
-#define max_measurement 2
+#define max_measurement 1
 
 #define BEAT_LED LED_BUILTIN
 #define select_btn_pin 2
@@ -92,14 +92,14 @@ bool led_on = false;         // true jika led sedang menyala, false jika led mat
 bool tensimeter_on = false;  // true jika tensimeter sedang menyala, false jika tensimeter mati
 bool repeat_flag = false;    // true untuk melakukan pengulangan, false setelah melakukan pengulangan (sudah selesai)
 bool on_repeat = false;      // true jika sudah pernah melakukan pengulangan, false jika masih dalam pengukuran pertama
-int repeat_countdown = 300;    // countdown 5 menit untuk repeat
+int repeat_countdown = 300;  // countdown 5 menit untuk repeat
 
 long now = 0;
 long lastTime = 0, lastBeat = 0;
 uint8_t sleep_counter = 0;
 
 int measurement_counter = 0;       // sudah berapa kali pengukuran
-int measurement_countdown = 60;     // countdown sebelum pengukuran berikutnya
+int measurement_countdown = 60;    // countdown sebelum pengukuran berikutnya
 long start_measurement_count = 0;  // variabel waktu millis
 long last_measurement_count = 0;   // variabel waktu millis
 
@@ -168,7 +168,7 @@ void loop() {
   }
 
   /* Measurement timer and counter */
-  if ((measurement_counter > 0 && measurement_counter <= max_measurement) && !tensimeter_on) {
+  if (((measurement_counter > 0 || repeat_flag) && measurement_counter <= max_measurement) && !tensimeter_on) {
     start_measurement_count = millis();                              // update millis
     if (start_measurement_count - last_measurement_count >= 1000) {  // blok untuk mengurangi countdown
       if (repeat_flag) {                                             // kalau repeat flag aktif
@@ -178,15 +178,16 @@ void loop() {
       }
       last_measurement_count = start_measurement_count;  // update last time
     }
-    if (repeat_flag && repeat_countdown == 0) {  // jika countdown repeat habis,
-      repeat_flag = false;                       // pengulangan selesai
-      on_repeat = true;                          // sudah melakukan pengulangan
-    }
     if (measurement_countdown == 0 || repeat_countdown == 0) {  // jika countdown measurement habis, nyalakan tensimeter
-      digitalWrite(tensimeter_pin, LOW);                                                 // trigger tensimeter
+      digitalWrite(tensimeter_pin, LOW);                        // trigger tensimeter
       delay(300);
       digitalWrite(tensimeter_pin, HIGH);
-      measurement_countdown = 60;
+
+      if (repeat_flag) {      // jika countdown repeat habis,
+        repeat_flag = false;  // pengulangan selesai
+        on_repeat = true;     // sudah melakukan pengulangan
+      }
+      measurement_countdown = 60;  // reset variabel
       repeat_countdown = 300;
       tensimeter_on = true;
     }
@@ -198,9 +199,15 @@ void loop() {
     __ssd1306__();
 
     // Serial.print("tensimeter_on"); Serial.print("\t:"); Serial.println(tensimeter_on);
-    Serial.print("repeat_flag"); Serial.print("\t:"); Serial.println(repeat_flag);
-    Serial.print("on_repeat"); Serial.print("\t:"); Serial.println(on_repeat);
-    Serial.print("repeat_countdown"); Serial.print("\t:"); Serial.println(repeat_countdown);
+    Serial.print("repeat_flag");
+    Serial.print("\t:");
+    Serial.println(repeat_flag);
+    Serial.print("on_repeat");
+    Serial.print("\t:");
+    Serial.println(on_repeat);
+    Serial.print("repeat_countdown");
+    Serial.print("\t:");
+    Serial.println(repeat_countdown);
     // Serial.print("measurement_counter"); Serial.print("\t:"); Serial.println(measurement_counter);
     // Serial.print("measurement_countdown"); Serial.print("\t:"); Serial.println(measurement_countdown);
   }
@@ -309,8 +316,8 @@ void __max30102__() {
         if (repeat_flag) {
           display.print(repeat_countdown / 60);
           display.print(":");
-          if (repeat_countdown % 60 < 10){
-            display.print(0);            
+          if (repeat_countdown % 60 < 10) {
+            display.print(0);
           }
           display.print(repeat_countdown % 60);
         } else {
@@ -385,8 +392,8 @@ void __ssd1306__() {
       if (repeat_flag) {
         display.print(repeat_countdown / 60);
         display.print(":");
-        if (repeat_countdown % 60 < 10){
-          display.print(0);          
+        if (repeat_countdown % 60 < 10) {
+          display.print(0);
         }
         display.print(repeat_countdown % 60);
       } else {
