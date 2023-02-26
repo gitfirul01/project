@@ -16,7 +16,7 @@
 
 #define SCREEN_ADDRESS 0x3C
 #define SPHYGMO_ADDRESS 0x50
-#define max_measurement 3
+#define max_measurement 2
 
 #define BEAT_LED LED_BUILTIN
 #define select_btn_pin 2
@@ -81,24 +81,27 @@ union packet_2 {
 packet_2 command;
 
 
-int risk;
+int risk, last_risk;
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
 
 int page;
 int menu = 1;
 
-bool led_on = false;
-bool tensimeter_on = false;
+bool led_on = false;         // true jika led sedang menyala, false jika led mati
+bool tensimeter_on = false;  // true jika tensimeter sedang menyala, false jika tensimeter mati
+bool repeat_flag = false;    // true untuk melakukan pengulangan, false setelah melakukan pengulangan (sudah selesai)
+bool on_repeat = false;      // true jika sudah pernah melakukan pengulangan, false jika masih dalam pengukuran pertama
+int repeat_countdown = 300;    // countdown 5 menit untuk repeat
 
 long now = 0;
 long lastTime = 0, lastBeat = 0;
 uint8_t sleep_counter = 0;
 
-int measurement_counter = 0;     // sudah berapa kali pengukuran
-int measurement_countdown = 60;  // countdown sebelum pengukuran berikutnya
-long start_measurement_count = 0;
-long last_measurement_count = 0;
+int measurement_counter = 0;       // sudah berapa kali pengukuran
+int measurement_countdown = 60;     // countdown sebelum pengukuran berikutnya
+long start_measurement_count = 0;  // variabel waktu millis
+long last_measurement_count = 0;   // variabel waktu millis
 
 
 
@@ -157,26 +160,35 @@ void loop() {
   if (_arduino2_.available()) {
     _arduino2_.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
     tensimeter_on = false;
-    measurement_countdown = 60;
     measurement_counter++;
 
-    digitalWrite(tensimeter_pin, LOW);  // reset tensimeter
+    digitalWrite(tensimeter_pin, LOW);  // reset tensimeter setelah penggunaan
     delay(300);
     digitalWrite(tensimeter_pin, HIGH);
   }
 
-  if ((measurement_counter > 0 && measurement_counter <= max_measurement) && tensimeter_on == false) {
-    start_measurement_count = millis();
-    if (start_measurement_count - last_measurement_count >= 1000) {
-      measurement_countdown--;
-      last_measurement_count = start_measurement_count;
+  /* Measurement timer and counter */
+  if ((measurement_counter > 0 && measurement_counter <= max_measurement) && !tensimeter_on) {
+    start_measurement_count = millis();                              // update millis
+    if (start_measurement_count - last_measurement_count >= 1000) {  // blok untuk mengurangi countdown
+      if (repeat_flag) {                                             // kalau repeat flag aktif
+        repeat_countdown--;                                          // kurangi countdown repeat 300 detik
+      } else {                                                       // kalau repeat flag tdk aktif
+        measurement_countdown--;                                     // kurangi countdown measurement 60 detik
+      }
+      last_measurement_count = start_measurement_count;  // update last time
     }
-    if (measurement_countdown == 0) {
-      tensimeter_on = true;
-
-      digitalWrite(tensimeter_pin, LOW);  // trigger tensimeter
+    if (repeat_flag && repeat_countdown == 0) {  // jika countdown repeat habis,
+      repeat_flag = false;                       // pengulangan selesai
+      on_repeat = true;                          // sudah melakukan pengulangan
+    }
+    if (measurement_countdown == 0 || repeat_countdown == 0) {  // jika countdown measurement habis, nyalakan tensimeter
+      digitalWrite(tensimeter_pin, LOW);                                                 // trigger tensimeter
       delay(300);
       digitalWrite(tensimeter_pin, HIGH);
+      measurement_countdown = 60;
+      repeat_countdown = 300;
+      tensimeter_on = true;
     }
   }
 
@@ -184,6 +196,13 @@ void loop() {
   if (now - lastTime > 300) {
     __check_condition__();
     __ssd1306__();
+
+    // Serial.print("tensimeter_on"); Serial.print("\t:"); Serial.println(tensimeter_on);
+    Serial.print("repeat_flag"); Serial.print("\t:"); Serial.println(repeat_flag);
+    Serial.print("on_repeat"); Serial.print("\t:"); Serial.println(on_repeat);
+    Serial.print("repeat_countdown"); Serial.print("\t:"); Serial.println(repeat_countdown);
+    // Serial.print("measurement_counter"); Serial.print("\t:"); Serial.println(measurement_counter);
+    // Serial.print("measurement_countdown"); Serial.print("\t:"); Serial.println(measurement_countdown);
   }
 }
 
@@ -198,15 +217,8 @@ void change_isr() {
 
 void select_isr() {
   if (page == 4) {
-    if (menu == 1) {
+    if (menu == 1) {  // jika menu send terpilih
       command.value.spo2 = SPO2;
-
-      if (risk > 2) {
-        command.value.cmd = 'D';
-      } else if (risk == 2) {
-        command.value.cmd = 'W';
-      } else command.value.cmd = 'n';
-
       _arduino2_.write(command.byteArray, sizeof(command.byteArray));
 
       // Serial.print(command.value.cmd); Serial.print("\t");
@@ -263,15 +275,8 @@ void __max30102__() {
     Red_signal = pulseRed.dc_filter(redValue);
     beatRed = pulseRed.isBeat(pulseRed.ma_filter(Red_signal));
     beatIR = pulseIR.isBeat(pulseIR.ma_filter(IR_signal));
-    // } else {
-    //   IR_signal = pulseIR.ma_filter(pulseIR.dc_filter(irValue));
-    //   Red_signal = pulseRed.ma_filter(pulseRed.dc_filter(redValue));
-    //   beatRed = pulseRed.isBeat(Red_signal);
-    //   beatIR = pulseIR.isBeat(IR_signal);
-    // }
     // check IR or Red for heartbeat
     if (beatIR) {
-      // if (draw_Red ? beatRed : beatIR) {
       long btpm = 60000 / (now - lastBeat);
       if (btpm > 0 && btpm < 200) beatAvg = bpm.filter((int16_t)btpm);
       lastBeat = now;
@@ -298,10 +303,22 @@ void __max30102__() {
         display.print(F("Diastole: "));
         display.print(sphygmo.value.dias);
 
-        display.setCursor(100, 55);
+        display.setCursor(115, 41);
         display.print(measurement_counter);
-        display.print("/");
-        display.print(measurement_countdown);
+        display.setCursor(98, 55);
+        if (repeat_flag) {
+          display.print(repeat_countdown / 60);
+          display.print(":");
+          if (repeat_countdown % 60 < 10){
+            display.print(0);            
+          }
+          display.print(repeat_countdown % 60);
+        } else {
+          if (measurement_countdown < 10) display.setCursor(115, 55);
+          else display.setCursor(108, 55);
+          display.print(measurement_countdown);
+        }
+
         display.display();
       }
       //
@@ -362,10 +379,21 @@ void __ssd1306__() {
       display.setCursor(65, 55);
       display.print(sphygmo.value.dias);
 
-      display.setCursor(100, 55);
+      display.setCursor(115, 41);
       display.print(measurement_counter);
-      display.print("/");
-      display.print(measurement_countdown);
+      display.setCursor(98, 55);
+      if (repeat_flag) {
+        display.print(repeat_countdown / 60);
+        display.print(":");
+        if (repeat_countdown % 60 < 10){
+          display.print(0);          
+        }
+        display.print(repeat_countdown % 60);
+      } else {
+        if (measurement_countdown < 10) display.setCursor(115, 55);
+        else display.setCursor(108, 55);
+        display.print(measurement_countdown);
+      }
 
       break;
     case 3:
@@ -382,21 +410,29 @@ void __ssd1306__() {
 
       if (risk == 0) {
         display.println(F("Normal"));
-      }
-      if (risk == 1) {
+        command.value.cmd = 'n';  // normal
+        repeat_flag = false;
+
+      } else if (risk == 1) {
         display.println(F("Normal"));
-        // display.println(F("ulangi pengamatan dalam 30 menit"));
-      }
-      if (risk == 2) {
+        command.value.cmd = 'N';  // normal, dengan peringatan
+        if (!on_repeat) {         // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
+          repeat_flag = true;     // maka lakukan repeat
+        }
+
+      } else if (risk == 2) {
         display.println(F("Waspada"));
-        // display.println(F("panggil dokter kandungan dan"));
-        // display.println(F("ulangi pengamatan dalam 30 menit"));
-      }
-      if (risk > 2) {
+        command.value.cmd = 'W';  // warning
+        if (!on_repeat) {         // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
+          repeat_flag = true;     // maka lakukan repeat
+        }
+
+      } else if (risk > 2) {
         display.println(F("Bahaya"));
-        // display.println(F("peninjauan segera oleh dokter kandungan"));
-        // display.println(F("dan observasi ulang dalam 15 menit"));
-        // display.println(F("atau pemantauan terus menerus"));
+        command.value.cmd = 'D';  // danger
+        if (!on_repeat) {         // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
+          repeat_flag = true;     // maka lakukan repeat
+        }
       }
 
       display.setCursor(0, 32);
@@ -418,7 +454,7 @@ void __check_condition__() {
    * risk = 1: warn
    * risk = 2: danger
    */
-  if (measurement_counter == max_measurement) {
+  if (measurement_counter == max_measurement) {  // cek kondisi jika jumlah pengukuran sudah mencapai batas maksimal
     if (SPO2 < 95) risk += 2;
 
     if ((sphygmo.value.sys < 90) || (sphygmo.value.sys > 180)) risk += 2;
@@ -430,6 +466,7 @@ void __check_condition__() {
     if ((sphygmo.value.bpm < 40) || (sphygmo.value.bpm > 120)) risk += 2;
     else if (((40 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 50)) || ((100 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 120))) risk += 1;
 
+    last_risk = risk;
     page = 4;
     measurement_counter = 0;
   }
