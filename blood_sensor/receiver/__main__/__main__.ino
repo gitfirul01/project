@@ -15,6 +15,7 @@
 #include <SoftwareSerial.h>
 
 String msg;
+bool msg_received = false;
 
 SoftwareSerial SIM900A(gsm_tx, gsm_rx);
 
@@ -67,10 +68,11 @@ void setup() {
 void loop() {
   updateSerial();
 
-  if (msg.indexOf("REPORT") >= 0) {
+  if (msg_received) {
     for (int i = 0; i < 5; i++) {
       buzzer();
     }
+    msg_received = false;
     msg = "";
   }
 }
@@ -92,6 +94,9 @@ void updateSerial() {
     // Serial.write(Serial.read());
     msg = SIM900A.readString();
     Serial.print(msg);
+    if (msg.indexOf("REPORT") >= 0) {
+      msg_received = true;
+    }
   }
 }
 
