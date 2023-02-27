@@ -80,20 +80,22 @@ void loop() {
     Serial.print("\t");
     Serial.println("done");
 
-    if (command.value.cmd != 'n') {
-      if (command.value.cmd = 'D') {
-        // send_sms(device2_number, "Bahaya");
-        // send_sms(doctor_number, "Bahaya");
-        call(doctor_number);
-      } else if (command.value.cmd = 'W') {
-        // send_sms(device2_number, "Waspada");
-        // send_sms(doctor_number, "Waspada");
-        call(doctor_number);
-      } else if (command.value.cmd = 'N') {
-        // send_sms(device2_number, "Normal dengan peringatan");
-        // send_sms(doctor_number, "Normal dengan peringatan");
-        call(doctor_number);
-      }
+    if (command.value.cmd = 'D') {
+      send_sms(device2_number, "Bahaya");
+      // send_sms(doctor_number, "Bahaya");
+      // call(doctor_number);
+    } else if (command.value.cmd = 'W') {
+      send_sms(device2_number, "Waspada");
+      // send_sms(doctor_number, "Waspada");
+      // call(doctor_number);
+    } else if (command.value.cmd = 'N') {
+      send_sms(device2_number, "Normal dengan peringatan");
+      // send_sms(doctor_number, "Normal dengan peringatan");
+      // call(doctor_number);
+    } else if (command.value.cmd != 'n') {
+      send_sms(device2_number, "Normal");
+      // send_sms(doctor_number, "Normal");
+      // call(doctor_number);
     }
     http_post();  // kirim data ke website jika ada data masuk dari arduino 1
   }
@@ -119,9 +121,10 @@ void send_sms(String number, String message) {
   updateSerial();
   SIM900A.print("AT+CMGS=\"" + number + "\"\r");
   updateSerial();
-  SIM900A.print("Status: " + message + "\n\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(sphygmo.value.bpm));
+  SIM900A.print("REPORT\n\nStatus: " + message + "\nSpO2 = " + String(command.value.spo2) + "\nSys = " + String(sphygmo.value.sys) + "\nDias = " + String(sphygmo.value.dias) + "\nRate = " + String(sphygmo.value.bpm));
   updateSerial();
   SIM900A.write(26);
+  delay(1000);
 }
 
 void call(String number) {
