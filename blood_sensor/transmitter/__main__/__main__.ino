@@ -16,7 +16,7 @@
 
 #define SCREEN_ADDRESS 0x3C
 #define SPHYGMO_ADDRESS 0x50
-#define max_measurement 1
+#define max_measurement 3
 
 #define BEAT_LED LED_BUILTIN
 #define select_btn_pin 2
@@ -81,7 +81,7 @@ union packet_2 {
 packet_2 command;
 
 
-int risk, last_risk;
+int risk;
 int beatAvg = 0;
 int SPO2 = 0, SPO2f = 0;
 
@@ -461,7 +461,6 @@ void __check_condition__() {
     if ((sphygmo.value.bpm < 40) || (sphygmo.value.bpm > 120)) risk += 2;
     else if (((40 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 50)) || ((100 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 120))) risk += 1;
 
-    last_risk = risk;
     page = 4;
     measurement_counter = 0;
   }
