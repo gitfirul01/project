@@ -9,12 +9,11 @@
 
 #define gsm_rx 3
 #define gsm_tx 2
-// #define buz_pin 5
-#define buz_pin LED_BUILTIN
+#define buz_pin 5
+// #define buz_pin LED_BUILTIN
 
 #include <SoftwareSerial.h>
 
-bool msg_received = 0;
 String msg;
 
 SoftwareSerial SIM900A(gsm_tx, gsm_rx);
@@ -25,6 +24,7 @@ void setup() {
   SIM900A.begin(2400);
 
   pinMode(buz_pin, OUTPUT);
+  digitalWrite(buz_pin, LOW);
   delay(500);
 
   SIM900A.println("AT");
@@ -36,7 +36,11 @@ void setup() {
   SIM900A.println("AT+CREG?");
   updateSerial();
 
-  // SEND SMS
+  /* UPLOAD TO SERVER */
+  // http_post();
+  // cip_post();
+
+  /* SEND SMS */
   // SIM900A.println("AT+CMGF=1");
   // updateSerial();
   // SIM900A.print("AT+CMGS=\"081228445269\"\r");
@@ -45,14 +49,13 @@ void setup() {
   // updateSerial();
   // SIM900A.write(26); // send ASCII character of <CTRL+Z>, or 0x1A
 
-  // RECEIVE SMS
-  SIM900A.println("AT+CMGF=1"); updateSerial();
-  SIM900A.println("AT+CNMI=1,2,0,0,0"); updateSerial();
+  /* RECEIVE SMS */
+  SIM900A.println("AT+CMGF=1");
+  updateSerial();
+  SIM900A.println("AT+CNMI=1,2,0,0,0");
+  updateSerial();
 
-  // http_post();
-  // cip_post();
-
-  //  MAKE A CALL
+  /*  MAKE A CALL */
   // SIM900A.println("ATD081228445269;");
   // updateSerial();
   // delay(20000);
@@ -65,14 +68,9 @@ void loop() {
   updateSerial();
 
   if (msg.indexOf("REPORT") >= 0) {
-    msg_received = 1;
-  }
-
-  if (msg_received) {
     for (int i = 0; i < 5; i++) {
       buzzer();
     }
-    msg_received = 0;
     msg = "";
   }
 }
