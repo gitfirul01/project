@@ -2,13 +2,14 @@
   
    |  Arduino  |  SIM900A  |
    |-----------|-----------|
-   |  D3 (RX)  |   U-TX    |
-   |  D2 (TX)  |   U-RX    |
+   |  D4 (RX)  |   U-TX    |
+   |  D3 (TX)  |   U-RX    |
    
 */
 
-#define gsm_rx 3
-#define gsm_tx 2
+#define gsm_rx 4
+#define gsm_tx 3
+#define buz_rst 2
 #define buz_pin 5
 // #define buz_pin LED_BUILTIN
 
@@ -25,6 +26,7 @@ void setup() {
   SIM900A.begin(2400);
 
   pinMode(buz_pin, OUTPUT);
+  pinMode(buz_rst, INPUT_PULLUP);
   digitalWrite(buz_pin, LOW);
   delay(500);
 
@@ -62,21 +64,27 @@ void setup() {
   // delay(20000);
   // SIM900A.println("ATH");
   // updateSerial();
+
+  attachInterrupt(digitalPinToInterrupt(buz_rst), buzzer_reset, FALLING);
 }
 
 
 void loop() {
   updateSerial();
 
-  if (msg_received) {
-    for (int i = 0; i < 5; i++) {
-      buzzer();
+  while (msg_received) {
+    buzzer();
+    if (!msg_received) {
+      break;
     }
-    msg_received = false;
-    msg = "";
   }
 }
 
+
+void buzzer_reset() {
+  msg_received = false;
+  msg = "";
+}
 
 void buzzer() {
   digitalWrite(buz_pin, HIGH);
