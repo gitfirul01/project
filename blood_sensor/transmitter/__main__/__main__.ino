@@ -17,11 +17,14 @@
 #define SCREEN_ADDRESS 0x3C
 #define SPHYGMO_ADDRESS 0x50
 #define max_measurement 3
+#define id_len 5
 
 #define BEAT_LED LED_BUILTIN
 #define select_btn_pin 2
 #define change_btn_pin 3
 #define tensimeter_pin 9
+
+char charArr[] = { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' };
 
 //spo2_table is approximated as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
 const uint8_t spo2_table[184] PROGMEM = { 95, 95, 95, 96, 96, 96, 97, 97, 97, 97, 97, 98, 98, 98, 98, 98, 99, 99, 99, 99,
@@ -72,6 +75,7 @@ packet_1 sphygmo;
 // data to send
 struct data_2 {
   int spo2;
+  char id[id_len];
   char cmd;
 };
 union packet_2 {
@@ -80,6 +84,9 @@ union packet_2 {
 };
 packet_2 command;
 
+int sys_avg;
+int dia_avg;
+int pul_avg;
 
 int risk;
 int beatAvg = 0;
@@ -148,6 +155,10 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(change_btn_pin), change_isr, FALLING);
   attachInterrupt(digitalPinToInterrupt(select_btn_pin), select_isr, FALLING);
+
+  for (int i = 0; i < id_len; i++) {
+    command.value.id[i] = charArr[random(35)];
+  }
 }
 
 
@@ -160,6 +171,14 @@ void loop() {
   /* Waiting data from tensimeter */
   if (_arduino2_.available()) {
     _arduino2_.readBytes(sphygmo.byteArray, sizeof(sphygmo.byteArray));
+    sphygmo.value.sys = abs(sphygmo.value.sys);
+    sphygmo.value.dias = abs(sphygmo.value.dias);
+    sphygmo.value.bpm = abs(sphygmo.value.bpm);
+
+    sys_avg += sphygmo.value.sys;
+    dia_avg += sphygmo.value.dias;
+    pul_avg += sphygmo.value.bpm;
+
     tensimeter_on = false;
     measurement_counter++;
 
@@ -206,28 +225,38 @@ void loop() {
 void change_isr() {
   if (page == 4) {
     menu++;
-    if (menu > 2) menu = 1;
+    if (menu > 3) menu = 1;
   }
 }
 
 void select_isr() {
   if (page == 4) {
-    if (menu == 1) {                                                     // jika menu send terpilih
-      if (!msg_sent) {                                                   // jika belum pernah kirim pesan
-        command.value.spo2 = SPO2;                                       //
-        _arduino2_.write(command.byteArray, sizeof(command.byteArray));  // maka kirim pesan
-      } else {                                                           // jika sudah pernah kirim pesan,
-        msg_sent = false;                                                // maka matikan flag
+    if (menu == 2) {
+      for (int i = 0; i < id_len; i++) {
+        command.value.id[i] = charArr[random(35)];
       }
-      // Serial.print(command.value.cmd); Serial.print("\t");
-      // Serial.print(command.value.bpm); Serial.print("\t");
-      // Serial.print(command.value.spo2); Serial.print("\t");
-      // Serial.println("done");
+      // Serial.println(command.value.id);
+    } else {
+      if (menu == 1) {                                                     // jika menu send terpilih
+        if (!msg_sent) {                                                   // jika belum pernah kirim pesan
+          command.value.spo2 = SPO2;                                       //
+          _arduino2_.write(command.byteArray, sizeof(command.byteArray));  // maka kirim pesan
+        } else {                                                           // jika sudah pernah kirim pesan,
+          msg_sent = false;                                                // maka matikan flag
+        }
+        // Serial.print(command.value.cmd); Serial.print("\t");
+        // Serial.print(command.value.bpm); Serial.print("\t");
+        // Serial.print(command.value.spo2); Serial.print("\t");
+        // Serial.println("done");
+      }
+
+      if (on_repeat) on_repeat = false;
+      risk = 0;
+      page = 2;
+      menu = 1;
     }
-    if (on_repeat) on_repeat = false;
-    risk = 0;
-    page = 2;
-    menu = 1;
+  } else {
+    page = 4;
   }
 }
 
@@ -256,7 +285,7 @@ void __max30102__() {
   uint32_t redValue = sensor.getRed();
   sensor.nextSample();
 
-  if (irValue < 5000) {
+  if (irValue < 50000) {
     page = (page == 4 ? 4 : (sleep_counter <= 100 ? 1 : 3));
     delay(100);
     ++sleep_counter;
@@ -286,7 +315,7 @@ void __max30102__() {
         display.drawBitmap(0, 0, logo3_bmp, 32, 32, WHITE);
         display.setTextSize(2);
         display.setCursor(42, 15);
-        display.print(beatAvg);
+        display.print(sphygmo.value.bpm);
         display.setCursor(90, 15);
         display.print(SPO2);
 
@@ -360,7 +389,7 @@ void __ssd1306__() {
       display.drawBitmap(5, 5, logo2_bmp, 24, 21, WHITE);
       display.setTextSize(2);
       display.setCursor(42, 15);
-      display.print(beatAvg);
+      display.print(sphygmo.value.bpm);
       display.setCursor(90, 15);
       display.print(SPO2);
 
@@ -406,6 +435,9 @@ void __ssd1306__() {
     case 4:  // condition interface
       display.setTextSize(1);
       display.setCursor(0, 0);
+      display.print(F("ID    : "));
+      display.println(command.value.id);
+      display.print(F("Status: "));
 
       if (risk == 0) {
         display.println(F("Normal [0]"));  // pesan pada LCD
@@ -420,7 +452,7 @@ void __ssd1306__() {
           command.value.cmd = 'W';            // warning
         } else if (risk > 2) {
           display.println("Bahaya [" + String(risk) + "]");  // pesan pada LCD
-          command.value.cmd = 'D';                      // danger
+          command.value.cmd = 'D';                           // danger
         }
         if (!on_repeat) {                                                  // jika tidak dalam keadaan repeat (belum pernah melakukan repeat),
           repeat_flag = true;                                              // maka lakukan repeat
@@ -430,11 +462,15 @@ void __ssd1306__() {
           msg_sent = true;                                                 // flag pesan terkirim
         }
       }
+
       display.setCursor(0, 32);
       if (menu == 1) display.println(F("> Send"));
       else display.println(F("  Send"));
 
-      if (menu == 2) display.println(F("> Back"));
+      if (menu == 2) display.println(F("> Change ID"));
+      else display.println(F("  Change ID"));
+
+      if (menu == 3) display.println(F("> Back"));
       else display.println(F("  Back"));
 
       break;
@@ -450,18 +486,25 @@ void __check_condition__() {
    * risk = 2: danger
    */
   if (measurement_counter == max_measurement) {  // cek kondisi jika jumlah pengukuran sudah mencapai batas maksimal
+    sys_avg /= max_measurement;
+    dia_avg /= max_measurement;
+    pul_avg /= max_measurement;
+
     if (SPO2 < 95) risk += 2;
 
-    if ((sphygmo.value.sys < 90) || (sphygmo.value.sys > 180)) risk += 2;
-    else if (((90 <= sphygmo.value.sys) && (sphygmo.value.sys <= 100)) || ((150 <= sphygmo.value.sys) && (sphygmo.value.sys <= 180))) risk += 1;
+    if ((sys_avg < 90) || (sys_avg > 180)) risk += 2;
+    else if (((sys_avg >= 90) && (sys_avg <= 99)) || ((sys_avg >= 140) && (sys_avg <= 180))) risk += 1;
 
-    if (sphygmo.value.dias > 120) risk += 2;
-    else if ((100 <= sphygmo.value.dias) && (sphygmo.value.dias <= 120)) risk += 1;
+    if ((dia_avg < 50) || (dia_avg > 100)) risk += 2;
+    else if ((dia_avg >= 90) && (dia_avg <= 100)) risk += 1;
 
-    if ((sphygmo.value.bpm < 40) || (sphygmo.value.bpm > 120)) risk += 2;
-    else if (((40 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 50)) || ((100 <= sphygmo.value.bpm) && (sphygmo.value.bpm <= 120))) risk += 1;
+    if ((pul_avg < 40) || (pul_avg > 120)) risk += 2;
+    else if (((pul_avg >= 40) && (pul_avg <= 50)) || ((pul_avg >= 100) && (pul_avg <= 120))) risk += 1;
 
     page = 4;
     measurement_counter = 0;
+    sys_avg = 0;
+    dia_avg = 0;
+    pul_avg = 0;
   }
 }
