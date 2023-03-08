@@ -11,6 +11,7 @@
 #define device1_number "081328431180"
 #define device2_number "081328431160"
 #define doctor_number "081228445269"
+#define id_len 5
 
 SoftwareSerial _arduino1_(10, 11);
 SoftwareSerial SIM900A(8, 9);
@@ -30,6 +31,7 @@ packet_1 sphygmo;
 // data to receive
 struct data_2 {
   int spo2;
+  char id[id_len];
   char cmd;
 };
 union packet_2 {
@@ -102,6 +104,8 @@ void loop() {
 
   if (millis() - lastTime > 1000) {
     if (data_available) {
+      sphygmo.value.dias = 0.8*sphygmo.value.dias + 8.4;
+
       _arduino1_.listen();
       _arduino1_.write(sphygmo.byteArray, sizeof(sphygmo.byteArray));
     }
@@ -190,7 +194,7 @@ void receiveEvent(int howMany) {
 void http_post() {
   String sendtoserver;
   sendtoserver += "nama=";
-  sendtoserver += "-";
+  sendtoserver += command.value.id;
   sendtoserver += "&tanggallahir=";
   sendtoserver += "0000-00-00";  // yyyy-mm-dd
   sendtoserver += "&paritas=";
