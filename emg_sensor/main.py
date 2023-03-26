@@ -111,15 +111,15 @@ class mainWindow(QMainWindow):
 
 
     def read_data(self): 
-        x = 0.07*(1000/self.delayms)  ## counter untuk deteksi        (0,07s)
-        y = 1*(1000/self.delayms)     ## counter untuk tidak deteksi  (1s)
-        z = 2*(1000/self.delayms)     ## counter untuk reset deteksi  (2s)
+        x = 0.07*(1000/self.delayms)  # counter untuk deteksi        (0,07s)
+        y = 1*(1000/self.delayms)     # counter untuk tidak deteksi  (1s)
+        z = 2*(1000/self.delayms)     # counter untuk reset deteksi  (2s)
             
         try:
             # data = self.serial_port.readline().decode().strip() 
             data = randrange(0, 200)
 
-            # filter nilai potensi aksi
+            ## filter nilai potensi aksi
             self.actPotential = self.ema(data, self.prev_actPotential, 0.5)
             self.actPotential = round(float(self.actPotential), 2)
             self.prev_actPotential = self.actPotential
@@ -179,7 +179,7 @@ class mainWindow(QMainWindow):
                 self.countD = 0
                 self.countI = 0 
 
-            # tampilkan nilai pada GUI
+            ## tampilkan nilai pada GUI
             self.var_frequency.setText(f"{self.frequency}")
             self.var_duration.setText(f"{self.duration}")
             self.var_interval.setText(f"{self.interval}")
