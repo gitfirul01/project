@@ -29,6 +29,10 @@ class mainWindow(QMainWindow):
         self.actPotential = 0   # kekuatan litrik rahim saat berkontraksi
         self.maxPotential = 0 
 
+        self.prev_duration = 0      # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_interval = 0      # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_actPotential = 0  # variabel EMA untuk menampung nilai sebelumnya
+
         self.potential_threshold = 120   # batas atas potensi aksi untuk deteksi kontraksi, 120 adalah ujicoba menggunakan otot lengan
 
         self.countI = 0
@@ -38,10 +42,9 @@ class mainWindow(QMainWindow):
         self.countInterval = 0  # variabel untuk menampung nilai lamanya interval
         self.countDuration = 0  # variabel untuk menampung nilai lamanya durasi
 
-        self.delayms = 150
+        self.delayms = 100  # periode pembacaan nilai
 
         self.create_lineChart()
-
         # self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
 
         self.timer_read_data = QTimer()
@@ -115,14 +118,13 @@ class mainWindow(QMainWindow):
         try:
             # data = self.serial_port.readline().decode().strip() 
             data = randrange(0, 200)
-            value = round(float(data), 2)
-            self.actPotential = value 
 
-            self.var_frequency.setText(f"{self.frequency}")
-            self.var_duration.setText(f"{self.duration}")
-            self.var_interval.setText(f"{self.interval}")
-            self.var_maxPotent.setText(f"{self.maxPotential}")
-            self.var_actPotent.setText(f"{self.actPotential}")
+            # filter nilai potensi aksi
+            self.actPotential = self.ema(data, self.prev_actPotential, 0.5)
+            self.actPotential = round(float(self.actPotential), 2)
+            self.prev_actPotential = self.actPotential
+
+            self.series.append(self.counter, self.actPotential)
 
             ## jika terdeteksi sinyal melebihi treshold
             if self.actPotential > self.potential_threshold:
@@ -137,14 +139,16 @@ class mainWindow(QMainWindow):
             
             ## jika terdeteksi kontraksi (jumlah sinyal melebihi angka tertentu dan level deteksi = 0)
             if self.countI > x and self.levelD == 0:
+                self.frequency += 1
                 ## update max potential
                 if self.actPotential > self.maxPotential:
                     self.maxPotential = self.actPotential
                 ## hitung interval
                 self.timer_interval.stop()
                 self.interval = self.countInterval/(1000/self.delayms)     # convert milisecond of countInterval to second (1 s = 10 * 100 ms)
+                self.interval = self.ema(self.interval, self.prev_interval, 0.5)
                 self.interval = round(float(self.interval), 2)
-                self.frequency += 1
+                self.prev_interval = self.interval
                 ## inisialisasi timer durasi kontraksi
                 self.countDuration = 0
                 self.timer_duration.start()
@@ -159,7 +163,9 @@ class mainWindow(QMainWindow):
                 ## hitung durasi
                 self.timer_duration.stop()
                 self.duration = self.countDuration/(1000/self.delayms)     # convert milisecond of countDuration to second (1 s = 10 * 100 ms)
+                self.duration = self.ema(self.duration, self.prev_duration, 0.5)
                 self.duration = round(float(self.duration), 2)
+                self.prev_duration = self.duration
                 ## inisialisasi timer interval kontraksi
                 self.countInterval = 0
                 self.timer_interval.start()
@@ -173,7 +179,13 @@ class mainWindow(QMainWindow):
                 self.countD = 0
                 self.countI = 0 
 
-            self.series.append(self.counter, value)
+            # tampilkan nilai pada GUI
+            self.var_frequency.setText(f"{self.frequency}")
+            self.var_duration.setText(f"{self.duration}")
+            self.var_interval.setText(f"{self.interval}")
+            self.var_maxPotent.setText(f"{self.maxPotential}")
+            self.var_actPotent.setText(f"{self.actPotential}")
+
             self.counter += 1
  
 
@@ -221,6 +233,16 @@ class mainWindow(QMainWindow):
     def closeEvent(self, event): 
         # self.serial_port.close() 
         super().closeEvent(event)
+
+    def ema(self, data_now, data_prev, alfa):
+        # https://www.investopedia.com/terms/m/movingaverage.asp
+        return (data_now*alfa) + (data_prev*(1-alfa))
+    
+    # def ema(self, data_now, data_prev):
+    #     # https://www.investopedia.com/terms/m/movingaverage.asp
+    #     smoothing = 1.5
+    #     number = 2
+    #     return (data_now*(smoothing/(1+number))) + (data_prev*(1-(smoothing/(1+number))))
 
 
 if __name__ == "__main__":
