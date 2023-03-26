@@ -1,12 +1,12 @@
 import sys, serial, requests
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel 
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout#, QWidget, QHBoxLayout, QLabel 
 from PyQt5.QtGui import QPainter
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer#, Qt
 from PyQt5.QtChart import QChart, QChartView, QLineSeries
 from PyQt5.uic import loadUi
-from threading import Thread, Timer
-from time import sleep, time
+# from threading import Thread, Timer
+# from time import sleep, time
 
 from random import randrange
 
@@ -46,6 +46,10 @@ class mainWindow(QMainWindow):
 
         self.create_lineChart()
         # self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
+
+        self.btn_red.clicked.connect(self.close)
+        self.btn_yellow.clicked.connect(self.showNormal)
+        self.btn_green.clicked.connect(self.showFullScreen)
 
         self.timer_read_data = QTimer()
         self.timer_read_data.setInterval(self.delayms)  # ms
@@ -244,11 +248,11 @@ class mainWindow(QMainWindow):
     #     number = 2
     #     return (data_now*(smoothing/(1+number))) + (data_prev*(1-(smoothing/(1+number))))
 
-
+    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = mainWindow()
     window.show()
-    window.showMaximized()
+    window.showFullScreen()
 
     sys.exit(app.exec_())
