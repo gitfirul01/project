@@ -44,25 +44,30 @@ class mainWindow(QMainWindow):
 
         # self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
 
-        self.timer = QTimer()
-        self.timer.setInterval(self.delayms)  # ms
-        self.timer.timeout.connect(self.read_data)
-        self.timer.start()
+        self.timer_read_data = QTimer()
+        self.timer_read_data.setInterval(self.delayms)  # ms
+        self.timer_read_data.timeout.connect(self.read_data)
+        self.timer_read_data.start()
 
-        self.timerD = QTimer()
-        self.timerD.setInterval(self.delayms) # ms
-        self.timerD.timeout.connect(self.hitung_durasi)
-        self.timerD.stop()
+        self.timer_duration = QTimer()
+        self.timer_duration.setInterval(self.delayms) # ms
+        self.timer_duration.timeout.connect(self.hitung_durasi)
+        self.timer_duration.stop()
 
-        self.timerI = QTimer()
-        self.timerI.setInterval(self.delayms) # ms
-        self.timerI.timeout.connect(self.hitung_interval)
-        self.timerI.stop()
+        self.timer_interval = QTimer()
+        self.timer_interval.setInterval(self.delayms) # ms
+        self.timer_interval.timeout.connect(self.hitung_interval)
+        self.timer_interval.stop()
+
+        self.timer_send_web = QTimer()
+        self.timer_send_web.setInterval(3000) # ms
+        self.timer_send_web.timeout.connect(self.kirim_web)
+        self.timer_send_web.start()
         
-        self.timerF = QTimer()
-        self.timerF.setInterval(600000) # ms
-        self.timerF.timeout.connect(self.reset_data)
-        self.timerF.start()
+        self.timer_reset = QTimer()
+        self.timer_reset.setInterval(600000) # ms
+        self.timer_reset.timeout.connect(self.reset_data)
+        self.timer_reset.start()
 
         self.counter = 0
 
@@ -107,7 +112,7 @@ class mainWindow(QMainWindow):
         y = 1*(1000/self.delayms)     ## counter untuk tidak deteksi  (1s)
         z = 2*(1000/self.delayms)     ## counter untuk reset deteksi  (2s)
             
-        try: 
+        try:
             # data = self.serial_port.readline().decode().strip() 
             data = randrange(0, 200)
             value = round(float(data), 2)
@@ -136,12 +141,13 @@ class mainWindow(QMainWindow):
                 if self.actPotential > self.maxPotential:
                     self.maxPotential = self.actPotential
                 ## hitung interval
-                self.timerI.stop()
+                self.timer_interval.stop()
                 self.interval = self.countInterval/(1000/self.delayms)     # convert milisecond of countInterval to second (1 s = 10 * 100 ms)
+                self.interval = round(float(self.interval), 2)
                 self.frequency += 1
                 ## inisialisasi timer durasi kontraksi
                 self.countDuration = 0
-                self.timerD.start()
+                self.timer_duration.start()
                 ## ubah level deteksi = 1
                 self.countD = 0
                 self.levelD = 1
@@ -151,16 +157,15 @@ class mainWindow(QMainWindow):
                 if self.actPotential > self.maxPotential:
                     self.maxPotential = self.actPotential
                 ## hitung durasi
-                self.timerD.stop()
+                self.timer_duration.stop()
                 self.duration = self.countDuration/(1000/self.delayms)     # convert milisecond of countDuration to second (1 s = 10 * 100 ms)
-                
+                self.duration = round(float(self.duration), 2)
                 ## inisialisasi timer interval kontraksi
                 self.countInterval = 0
-                self.timerI.start()
+                self.timer_interval.start()
                 ## ubah level deteksi = 0
                 self.countI = 0
                 self.levelD = 0
-                self.kirim_web()
             ## jika tidak terdeteksi kontraksi lagi dalam 2 detik
             elif self.countD > z:
                 if self.actPotential > self.maxPotential: 
@@ -195,13 +200,12 @@ class mainWindow(QMainWindow):
         self.countD = 0
         self.countI = 0
         self.levelD = 0
-        self.timerD.stop()
-        self.timerI.stop()
+        self.timer_duration.stop()
+        self.timer_interval.stop()
     
     def kirim_web(self):
         url = 'https://uterus.sogydevelop.com/datakirim.php'
  
-
         data = {'noreg': str(self.noreg), 'nama': str(self.nama),'umur' : str(self.umur), 
                 'suami': self.suami,'gpa':self. gpa, 'umurkehamilan' : str(self.humur_hamil), 
                 'frequensi': str(self.frequency), 'durasi': str(self.duration),
