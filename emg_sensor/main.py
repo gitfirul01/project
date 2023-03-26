@@ -120,7 +120,7 @@ class mainWindow(QMainWindow):
         z = 2*(1000/self.delayms)     # counter untuk reset deteksi  (2s)
             
         try:
-            # data = self.serial_port.readline().decode().strip() 
+            # data = float(self.serial_port.readline().decode().strip())
             data = randrange(0, 200)
 
             ## filter nilai potensi aksi
@@ -227,7 +227,7 @@ class mainWindow(QMainWindow):
                 'frequensi': str(self.frequency), 'durasi': str(self.duration),
                 'intervaldata': str(self.interval), 'potensi': str(self.maxPotential)}
         
-        response = requests.post(url, data=data, auth=('admin12345', '12345678'))
+        response = requests.post(url, data=data, auth=('admin12345', '12345678'), timeout=2)
 
         if response.status_code == 200: 
             print('Data berhasil dikirim ke server')
