@@ -1,0 +1,52 @@
+#include <Adafruit_MAX31865.h>
+Adafruit_MAX31865 thermo = Adafruit_MAX31865(10, 11, 12, 13);
+#define RREF      430.0
+#define RNOMINAL  100.0
+
+unsigned long prevTime_P = 0;
+unsigned long prevTime_T = 0;
+
+
+
+void setup() {
+  Serial.begin(115200);
+  thermo.begin(MAX31865_3WIRE);
+}
+
+
+void loop() {
+  if(millis() > (prevTime_P + 1000)) {
+    prevTime_P = millis();
+    
+    float pressure = ptRead();
+    Serial.print("Pressure: "); Serial.print(pressure); Serial.println("  kPa");
+  }
+
+  if(millis() > (prevTime_T + 1000)) {
+    prevTime_T = millis();
+    
+    float temperature = rtdRead();
+    Serial.print("Temperature = "); Serial.print(temperature); Serial.println(" C");
+  }
+}
+
+
+float ptRead() {
+  float sensorVal = analogRead(A0);
+  float voltage = sensorVal * 5 * 1000 / 1024;
+  float pres = (voltage - 500) / 400;
+
+  return pres;
+}
+
+float rtdRead() {
+  uint16_t rtd = thermo.readRTD();
+  float ratio = rtd;
+  ratio /= 32768;
+  float temp = thermo.temperature(RNOMINAL, RREF);
+
+//  Serial.print("Ratio = "); Serial.println(ratio, 8);
+//  Serial.print("Resistance = "); Serial.println(RREF * ratio, 8);
+  
+  return temp;
+}

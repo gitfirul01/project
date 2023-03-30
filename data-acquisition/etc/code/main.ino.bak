@@ -1,0 +1,99 @@
+#include <Adafruit_MAX31865.h>
+#include <SPI.h>
+
+#define pc1 1
+#define pc2 1
+#define pc3 1
+#define pc4 1
+#define pc5 1
+#define pc6 1
+
+#define tc1 1.026725
+#define tc2 0.994048
+#define tc3 0.982688
+#define tc4 1.019901
+#define tc5 0.999771
+
+#define RREF      430.0
+#define RNOMINAL  100.0
+
+// use hardware SPI (MOSI 11, MISO 12, SCK 13) and assign CS bellow
+Adafruit_MAX31865 rtd[5] = {Adafruit_MAX31865(PB3), 
+                            Adafruit_MAX31865(PB4), 
+                            Adafruit_MAX31865(PB5), 
+                            Adafruit_MAX31865(PB6), 
+                            Adafruit_MAX31865(PB7)};
+
+unsigned long prevTime_P = 0;
+unsigned long prevTime_T = 0;
+unsigned long prevTime_Send = 0;
+
+typedef struct sensor_val {
+  float pressure[6];          // 4bytes of float
+  float temperature[5];
+};
+
+const unsigned long union_size = 44;    // 11*4 bytes of float
+
+typedef union serial_packet {
+  sensor_val sensor;
+  byte byteArray[union_size];
+};
+
+serial_packet serial;
+
+void setup() {
+  Serial.begin(115200);
+
+  for (int i = 0; i < 5; i++) {
+    rtd[i].begin(MAX31865_3WIRE);
+  }
+
+}
+
+
+void loop() {
+  if (millis() > (prevTime_P + 1000)) {
+    prevTime_P = millis();
+
+    serial.sensor.pressure[0] = ptRead(PA0)*pc1;
+    serial.sensor.pressure[1] = ptRead(PA1)*pc2;
+    serial.sensor.pressure[2] = ptRead(PA2)*pc3;
+    serial.sensor.pressure[3] = ptRead(PA3)*pc4;
+    serial.sensor.pressure[4] = ptRead(PA4)*pc5;
+    serial.sensor.pressure[5] = ptRead(PB0)*pc6;
+  }
+
+  if (millis() > (prevTime_T + 1000)) {
+    prevTime_T = millis();
+
+    serial.sensor.temperature[0] = rtd[0].temperature(RNOMINAL, RREF)*tc1;
+    serial.sensor.temperature[1] = rtd[1].temperature(RNOMINAL, RREF)*tc2;
+    serial.sensor.temperature[2] = rtd[2].temperature(RNOMINAL, RREF)*tc3;
+    serial.sensor.temperature[3] = rtd[3].temperature(RNOMINAL, RREF)*tc4;
+    serial.sensor.temperature[4] = rtd[4].temperature(RNOMINAL, RREF)*tc5;
+  }
+
+  if (millis() > (prevTime_Send + 1000)) {
+    prevTime_Send = millis();
+
+//    for (int i = 0; i < 6; i++) {
+//      Serial.print("Pressure"); Serial.print(i+1); Serial.print(": "); Serial.print(pressure[i]); Serial.println("  kPa");
+//    }
+//    for (int i = 0; i < 5; i++) {
+//      Serial.print("Temperature"); Serial.print(i+1); Serial.print(": "); Serial.print(temperature[i]); Serial.println(" C");
+//    }
+
+    Serial.write('$');
+    Serial.write(serial.byteArray, sizeof(serial.byteArray));
+  }
+}
+
+
+float ptRead(uint8_t adcPin) {
+  float sensorVal = analogRead(adcPin);
+  float voltage = sensorVal * 5 * 1000 / 1024;
+  float pres = (voltage - 500) / 400;
+
+  return pres;
+}

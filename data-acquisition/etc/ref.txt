@@ -1,0 +1,9 @@
+https://www.youtube.com/watch?v=_Bu6povAuSU
+https://www.youtube.com/watch?v=2FUupSx3ftw
+
+https://stackoverflow.com/questions/25047846/determine-button-clicked-subplot-in-matplotlib
+https://stackoverflow.com/questions/44997029/matplotlib-show-single-graph-out-of-object-of-subplots
+https://stackoverflow.com/questions/44780452/plot-subplot-axes-in-separate-figure-in-matplotlib
+https://matplotlib.org/stable/gallery/event_handling/coords_demo.html
+https://matplotlib.org/stable/users/event_handling.html
+https://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python

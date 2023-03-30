@@ -1,0 +1,22 @@
+serial:
+    port: COM10
+    baud: 115200
+file:
+    name: export_dataframe
+data:
+    generate_custom_data: 1
+graph:
+    custom_x_dataframe: 1
+    x_threshold: 30
+
+    pressure_color: blue
+    custom_yp_dataframe: 1
+    yp_min: 0
+    yp_max: 1.3
+
+    temperature_color: red
+    custom_yt_dataframe: 1
+    yt_min: 30.50
+    yt_max: 34.50
+
+    interval: 1000
