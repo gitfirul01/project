@@ -15,6 +15,8 @@ class mainWindow(QMainWindow):
         super(mainWindow, self).__init__()
         loadUi('interface.ui', self)
 
+        self.max_val = 100
+
         self.noreg = 1
         self.nama = "nama pasien"
         self.umur = 30
@@ -45,7 +47,7 @@ class mainWindow(QMainWindow):
         self.delayms = 100  # periode pembacaan nilai
 
         self.create_lineChart()
-        # self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
+        self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
 
         self.btn_red.clicked.connect(self.close)
         self.btn_yellow.clicked.connect(self.showNormal)
@@ -106,7 +108,8 @@ class mainWindow(QMainWindow):
 
         self.chart.createDefaultAxes()
         self.chart.axisX().setRange(0, 100)
-        self.chart.axisY().setRange(0, 200)
+        # self.chart.axisY().setRange(0, 5000)
+        self.chart.axisY().setRange(0, self.max_val)
         # self.chart.axisX().setTitleText("time")
 
         self.chart.legend().setVisible(False)
@@ -120,8 +123,8 @@ class mainWindow(QMainWindow):
         z = 2*(1000/self.delayms)     # counter untuk reset deteksi  (2s)
             
         try:
-            # data = float(self.serial_port.readline().decode().strip())
-            data = randrange(0, 200)
+            data = float(self.serial_port.readline().decode().strip())
+            # data = randrange(0, 200)
 
             ## filter nilai potensi aksi
             self.actPotential = self.ema(data, self.prev_actPotential, 0.5)
@@ -196,7 +199,10 @@ class mainWindow(QMainWindow):
             if len(self.series) > 100:
                 # self.series.removePoints(0, 1)
                 self.chart.axisX().setRange(self.counter - 100, self.counter)
-            self.chart.axisY().setRange(0, 200)
+            if self.actPotential > self.max_val:
+                self.max_val = self.actPotential
+                self.chart.axisY().setRange(0, 3*self.max_val)
+            # self.chart.axisY().setRange(0, 5000)
  
             self.chart_view.repaint()
 
@@ -235,8 +241,8 @@ class mainWindow(QMainWindow):
             print('Terjadi kesalahan dalam mengirim data ke server')
 
     def closeEvent(self, event): 
-        # self.serial_port.close() 
-        super().closeEvent(event)
+        self.serial_port.close() 
+        # super().closeEvent(event)
 
     def ema(self, data_now, data_prev, alfa):
         # https://www.investopedia.com/terms/m/movingaverage.asp
