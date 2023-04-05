@@ -15,7 +15,7 @@ class mainWindow(QMainWindow):
         super(mainWindow, self).__init__()
         loadUi('interface.ui', self)
 
-        self.max_val = 100
+        self.max_val = 30
 
         self.noreg = 1
         self.nama = "nama pasien"
@@ -46,8 +46,12 @@ class mainWindow(QMainWindow):
 
         self.delayms = 100  # periode pembacaan nilai
 
+        try:
+            self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
+        except:
+            print("Serial port tidak terdeteksi")
+
         self.create_lineChart()
-        self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
 
         self.btn_red.clicked.connect(self.close)
         self.btn_yellow.clicked.connect(self.showNormal)
@@ -123,8 +127,11 @@ class mainWindow(QMainWindow):
         z = 2*(1000/self.delayms)     # counter untuk reset deteksi  (2s)
             
         try:
-            data = float(self.serial_port.readline().decode().strip())
-            # data = randrange(0, 200)
+            try:
+                data = float(self.serial_port.readline().decode().strip())
+            except:
+                print("gagal membaca data dari serial")
+                data = randrange(0, 200)
 
             ## filter nilai potensi aksi
             self.actPotential = self.ema(data, self.prev_actPotential, 0.5)
@@ -233,15 +240,21 @@ class mainWindow(QMainWindow):
                 'frequensi': str(self.frequency), 'durasi': str(self.duration),
                 'intervaldata': str(self.interval), 'potensi': str(self.maxPotential)}
         
-        response = requests.post(url, data=data, auth=('admin12345', '12345678'), timeout=2)
+        try:
+            response = requests.post(url, data=data, auth=('admin12345', '12345678'), timeout=2)
+        except:
+            pass
 
         if response.status_code == 200: 
             print('Data berhasil dikirim ke server')
         else: 
             print('Terjadi kesalahan dalam mengirim data ke server')
 
-    def closeEvent(self, event): 
-        self.serial_port.close() 
+    def closeEvent(self, event):
+        try:
+            self.serial_port.close() 
+        except:
+            pass
         # super().closeEvent(event)
 
     def ema(self, data_now, data_prev, alfa):
