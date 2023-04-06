@@ -1,346 +1,349 @@
-#!/usr/bin/python3
+import sys
+import serial
+import requests
+import csv
 
-import sys, math
-
-from threading import Thread #, Timer
-from time import sleep
+# , QWidget, QHBoxLayout, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout
+from PyQt5.QtGui import QPainter
+from PyQt5.QtCore import QTimer  # , Qt
+from PyQt5.QtChart import QChart, QChartView, QLineSeries
 from PyQt5.uic import loadUi
-from PyQt5 import QtWidgets
-from PyQt5.QtCore import Qt #, reset
-from PyQt5.QtWidgets import QDialog, QApplication, QMessageBox
-from PyQt5 import QtCore, QtGui, QtWidgets
+# from threading import Thread, Timer
+# from time import sleep, time
 
-## local lib
-from export_file import *
-from ultrasonic import  *
-# from mpu6050ac import *
-from gy_85ac import *
+from datetime import datetime
+from random import randrange
 
-ultrasonic = DFRobot_A02_Distance("/dev/ttyUSB0", 9600)
-dis_min = 30    # Minimum ranging threshold: 0mm
-dis_max = 7500  # Highest ranging threshold: 7500mm
-ultrasonic.set_dis_range(dis_min, dis_max)
+noreg = 1
+nama = "nama pasien"
+umur = 30
+suami = "nama suami"
+gpa = "gpa"
+humur_hamil = 8
 
-## if using GY85 or adxl345
-accelerometer = i2c_adxl345(1)
-## if using GY87 or mpu6050
-# accel_bus = smbus.SMBus(1)
-# device_address = 0x68
-# MPU_Init(accel_bus, device_address)
 
-## global variable
-operator = ''
-driver = ''
-nopol = ''
-tangki = ''
-
-panjang = 0.00
-lebar = 0.00
-tinggi = 0.00
-diameter = 0.00
-deltaVolume = 0.00
-
-tinggiBefore = 0.00
-tinggiAfter = 0.00
-volumeBefore = 0.00
-volumeAfter = 0.00
-
-accelStr = ''
-accelVal = []
-pitch = 0.00
-roll = 0.00
-yaw = 0.00
-
-distance = 0.00
-
-DIR = '/home/pi/LevellingPortable/'
-
-def handleVisibleChanged():
-    if not QtGui.QGuiApplication.inputMethod().isVisible():
-        return
-    for w in QtGui.QGuiApplication.allWindows():
-        if w.metaObject().className() == "QtVirtualKeyboard::InputView":
-            keyboard = w.findChild(QtCore.QObject, "keyboard")
-            if keyboard is not None:
-                r = w.geometry()
-                r.moveTop(keyboard.property("y"))
-                w.setMask(QtGui.QRegion(r))
-                return
-
-class screen1(QDialog):
+class main(QMainWindow):
     def __init__(self):
-        super(screen1, self).__init__()
-        loadUi(DIR+"UI/screen1.ui",self)
-        self.setWindowTitle("Window Title")
-        self.startButton.clicked.connect(self.gotoscreen2)
-        self.exitButton.clicked.connect(self.exit)
+        super(main, self).__init__()
+        loadUi('main.ui', self)
 
-    def gotoscreen2(self):
-        widget.setCurrentIndex(widget.currentIndex()+1)
-        
-    def exit(self):
-        sys.exit()
+        self.DATE = datetime.now().strftime("%d-%B-%Y, %H_%M_%S")
+        # self.PATH = '/home/pi/Desktop/Data/'
+        self.PATH = './'
+        self.csv_fileName = self.PATH + 'EMG-Data-Report-' + self.DATE + '.csv'
+        self.max_val = 30
+        self.delayms = 100  # periode pembacaan nilai
+        self.first = True
 
-class screen2(QDialog):
-    def __init__(self):
-        super(screen2, self).__init__()
-        loadUi(DIR+"UI/screen2.ui",self)
-        self.backButton.clicked.connect(self.back_action)
-        self.nextButton.clicked.connect(self.next_action)
-        
-        self.operatorText.textChanged.connect(self.operatorChanged)
-        self.driverText.textChanged.connect(self.driverChanged)
-        self.nopolText.textChanged.connect(self.nopolChanged)
+        # Kontraksi rahim dihitung setiap 10 menit
+        self.frekuensi = 0      # berapa kali rahim berkontraksi selama 10 menit
+        self.durasi = 0       # berapa detik rahim berkontraksi setiap kali dia berkontraksi
+        # berapa detik rahim beristirahat (jeda) sebelum berkontraksi kembali
+        self.interval = 0
+        self.actPotensi = 0   # kekuatan litrik rahim saat berkontraksi
+        self.maxPotensi = 0
 
-    def operatorChanged(self, text):
-        global operator
-        operator = text
-        
-    def driverChanged(self, text):
-        global driver
-        driver = text
-    
-    def nopolChanged(self, text):
-        global nopol
-        nopol = text
+        self.prev_durasi = 0      # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_interval = 0      # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_actPotensi = 0  # variabel EMA untuk menampung nilai sebelumnya
 
-    def back_action(self):
-        widget.setCurrentIndex(widget.currentIndex()-1)
+        # batas atas potensi aksi untuk deteksi kontraksi, 120 adalah ujicoba menggunakan otot lengan
+        self.potential_threshold = 12.0
 
-    def next_action(self):
-        widget.setCurrentIndex(widget.currentIndex()+1)
+        self.countI = 0
+        self.countD = 0
+        self.levelD = 0
 
-class screen3(QDialog):
-    def __init__(self):
-        super(screen3, self).__init__()
-        loadUi(DIR+"UI/screen3.ui",self)
-        self.backButton.clicked.connect(self.back_action)
-        self.tabungButton.clicked.connect(self.tabung_action)
-        self.kubusButton.clicked.connect(self.kubus_action)
+        self.time_count = 0  # variabel untuk menampung nilai lamanya waktu interval dan durasi
 
-    def tabung_action(self):
-        global tangki
-        tangki = 'tabung'
-        widget.setCurrentIndex(widget.currentIndex()+2)
-
-    def kubus_action(self):
-        global tangki
-        tangki = 'kubus'
-        widget.setCurrentIndex(widget.currentIndex()+1)
-
-    def back_action(self):
-        widget.setCurrentIndex(widget.currentIndex()-1)
-
-class screen4(QDialog):
-    def __init__(self):
-        super(screen4, self).__init__()
-        loadUi(DIR+"UI/screen4.ui",self)
-        self.backButton.clicked.connect(self.back_action)
-        self.nextButton.clicked.connect(self.next_action)
-        self.panjangText.textChanged.connect(self.panjangChanged)
-        self.lebarText.textChanged.connect(self.lebarChanged)
-
-    def panjangChanged(self, text):
-        global panjang
         try:
-            panjang = int(text)
+            self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
         except:
-            panjang = 'masukan angka'
+            print("Gagal membuka serial port. Generate data random . . .")
 
-    def lebarChanged(self, text):
-        global lebar
+        self.create_lineChart()
+
+        self.btn_red.clicked.connect(self.close)
+        self.btn_yellow.clicked.connect(self.showNormal)
+        self.btn_green.clicked.connect(self.showFullScreen)
+
+        self.timer_read_data = QTimer()
+        self.timer_read_data.setInterval(self.delayms)  # ms
+        self.timer_read_data.timeout.connect(self.read_data)
+        self.timer_read_data.start()
+
+        self.timer_counter = QTimer()
+        self.timer_counter.setInterval(self.delayms)  # ms
+        self.timer_counter.timeout.connect(self.time_counter)
+        self.timer_counter.stop()
+
+        self.timer_send_web = QTimer()
+        self.timer_send_web.setInterval(3000)  # ms
+        self.timer_send_web.timeout.connect(self.save_data)
+        self.timer_send_web.start()
+
+        self.timer_reset = QTimer()
+        self.timer_reset.setInterval(600000)  # ms
+        self.timer_reset.timeout.connect(self.reset_data)
+        self.timer_reset.start()
+
+        self.btn_edit.clicked.connect(self.open_edit_dialog)
+        self.dialogs = list()
+
+        self.counter = 0
+
+    def open_edit_dialog(self):
+        dialog = editData()
+        self.dialogs.append(dialog)
+        # dialog.show()
+        dialog.showFullScreen()
+
+    def create_lineChart(self):
+        # create chart object
+        self.chart = QChart()
+        self.chart.setAnimationOptions(QChart.SeriesAnimations)
+        # self.chart.setTitle("Electrical Signal")
+
+        self.chart_view = QChartView(self.chart)
+        self.chart_view.setRenderHint(QPainter.Antialiasing)
+
+        # create blank widget to store the graphic
+        # we do not do this because we have had chart_widget in .ui file
+        # so we just need to connect that
+        # chart_widget = QWidget(self)
+        # self.setCentralWidget(chart_widget)
+
+        # add the widget to chart_layout
+        chart_layout = QVBoxLayout(self.chart_widget)
+        # add chart_view widged to chart_layout
+        chart_layout.addWidget(self.chart_view)
+
+        self.series = QLineSeries()
+        self.chart.addSeries(self.series)
+
+        self.chart.createDefaultAxes()
+        self.chart.axisX().setRange(0, 100)
+        # self.chart.axisY().setRange(0, 5000)
+        self.chart.axisY().setRange(0, self.max_val)
+        # self.chart.axisX().setTitleText("time")
+
+        self.chart.legend().setVisible(False)
+        # self.chart.legend().setAlignment(Qt.AlignBottom)
+        # self.chart.legend().markers(self.series)[0].setLabel("Electrical Signal (mV)")
+
+    def read_data(self):
+        x = 0.07*(1000/self.delayms)  # counter untuk deteksi        (0,07s)
+        y = 1*(1000/self.delayms)     # counter untuk tidak deteksi  (1s)
+        z = 2*(1000/self.delayms)     # counter untuk reset deteksi  (2s)
+
         try:
-            lebar = int(text)
-        except:
-            lebar = 'masukan angka'
+            try:
+                data = float(self.serial_port.readline().decode().strip())
+            except:
+                data = randrange(0, 200)
 
-    def back_action(self):
-        widget.setCurrentIndex(widget.currentIndex()-1)
+            # filter nilai potensi aksi
+            self.actPotensi = self.ema(data, self.prev_actPotensi, 0.5)
+            self.actPotensi = round(float(self.actPotensi), 2)
+            self.prev_actPotensi = self.actPotensi
 
-    def next_action(self):
-        widget.setCurrentIndex(widget.currentIndex()+2)
+            self.series.append(self.counter, self.actPotensi)
 
-class screen5(QDialog):
-    def __init__(self):
-        super(screen5, self).__init__()
-        loadUi(DIR+"UI/screen5.ui",self)
-        self.backButton.clicked.connect(self.back_action)
-        self.nextButton.clicked.connect(self.next_action)
-        self.diameterText.textChanged.connect(self.diameterChanged)
+            # jika terdeteksi sinyal melebihi treshold
+            if self.actPotensi > self.potential_threshold:
+                self.countI += 1
+                self.countD = 0
+                self.maxPotensi = self.actPotensi
+            # jika tidak terdeteksi sinyal melebihi treshold
+            elif self.actPotensi < self.potential_threshold:
+                self.countD += 1
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
 
-    def diameterChanged(self, text):
-        global diameter
+            # jika terdeteksi kontraksi (jumlah sinyal melebihi angka tertentu dan level deteksi = 0)
+            if self.countI > x and self.levelD == 0:
+                self.frekuensi += 1
+                # update max potential
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
+                # hitung interval
+                self.timer_counter.stop()
+                # convert milisecond of time_count to second (1 s = 10 * 100 ms)
+                self.interval = round(float(
+                    self.ema(self.time_count/(1000/self.delayms),
+                             self.prev_interval, 0.5)),
+                    2)
+                self.prev_interval = self.interval
+                # inisialisasi timer durasi kontraksi
+                self.time_count = 0
+                self.timer_counter.start()
+                # ubah level deteksi = 1
+                self.countD = 0
+                self.levelD = 1
+            # jika tidak terdeteksi kontraksi lagi dalam 1 detik
+            elif self.countD > y and self.levelD == 1:
+                # update max potential
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
+                # hitung durasi
+                self.timer_counter.stop()
+                # convert milisecond of time_count to second (1 s = 10 * 100 ms)
+                self.durasi = round(float(
+                    self.ema(self.time_count/(1000/self.delayms),
+                             self.prev_interval, 0.5)),
+                    2)
+                self.prev_durasi = self.durasi
+                # inisialisasi timer interval kontraksi
+                self.time_count = 0
+                self.timer_counter.start()
+                # ubah level deteksi = 0
+                self.countI = 0
+                self.levelD = 0
+            # jika tidak terdeteksi kontraksi lagi dalam 2 detik
+            elif self.countD > z:
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
+                self.countD = 0
+                self.countI = 0
+
+            # tampilkan nilai pada GUI
+            self.var_frequency.setText(f"{self.frekuensi}")
+            self.var_duration.setText(f"{self.durasi}")
+            self.var_interval.setText(f"{self.interval}")
+            self.var_maxPotent.setText(f"{self.maxPotensi}")
+            self.var_actPotent.setText(f"{self.actPotensi}")
+
+            self.counter += 1
+
+            if len(self.series) > 100:
+                # self.series.removePoints(0, 1)
+                self.chart.axisX().setRange(self.counter - 100, self.counter)
+            if self.actPotensi > self.max_val:
+                self.max_val = self.actPotensi
+                self.chart.axisY().setRange(0, 3*self.max_val)
+            # self.chart.axisY().setRange(0, 5000)
+
+            self.chart_view.repaint()
+
+        except ValueError:
+            pass
+
+    def time_counter(self):
+        self.time_count += 1
+
+    def reset_data(self):
+        self.frekuensi = 0
+        self.durasi = 0
+        self.interval = 0
+        self.countD = 0
+        self.countI = 0
+        self.levelD = 0
+        self.timer_counter.stop()
+
+    def save_data(self):
+        global noreg, nama, umur, suami, gpa, humur_hamil
+        self.csv_export()
         try:
-            diameter = int(text)
+            url = 'https://uterus.sogydevelop.com/datakirim.php'
+            data = {'noreg': str(noreg), 'nama': str(nama), 'umur': str(umur),
+                    'suami': suami, 'gpa': self. gpa, 'umurkehamilan': str(humur_hamil),
+                    'frequensi': str(self.frekuensi), 'durasi': str(self.durasi),
+                    'intervaldata': str(self.interval), 'potensi': str(self.maxPotensi)}
+
+            response = requests.post(url, data=data, auth=(
+                'admin12345', '12345678'), timeout=2)
+
+            if response.status_code == 200:
+                print('Data berhasil dikirim ke server')
+            else:
+                print('Terjadi kesalahan dalam mengirim data ke server')
         except:
-            diameter = 'masukan angka'
+            print('Terjadi kesalahan dalam mengirim data ke server')
 
-    def back_action(self):
-        widget.setCurrentIndex(widget.currentIndex()-2)
+    def closeEvent(self, event):
+        try:
+            self.serial_port.close()
+        except:
+            pass
+        # super().closeEvent(event)
 
-    def next_action(self):
-        widget.setCurrentIndex(widget.currentIndex()+1)
+    def ema(self, data_now, data_prev, alfa):
+        # https://www.investopedia.com/terms/m/movingaverage.asp
+        return (data_now*alfa) + (data_prev*(1-alfa))
 
-class screen6(QDialog):
+    # def ema(self, data_now, data_prev):
+    #     # https://www.investopedia.com/terms/m/movingaverage.asp
+    #     smoothing = 1.5
+    #     number = 2
+    #     return (data_now*(smoothing/(1+number))) + (data_prev*(1-(smoothing/(1+number))))
+
+    def csv_export(self):
+        global noreg, nama, umur, suami, gpa, humur_hamil
+        try:
+            with open(self.csv_fileName, newline='') as csvfile:
+                csvfile.close()
+            self.first = False
+        except:
+            self.first = True
+
+        with open(self.csv_fileName, 'a', newline='') as csvfile:
+            timestamp = datetime.now().strftime("%d-%B-%Y %H:%M:%S")
+            field_names = ['Time', 'No Reg', 'Nama', 'Umur', 'Suami', 'GPA',
+                           'Umur Kehamilan', 'Frekuensi', 'Durasi', 'Interval', 'Potensi']
+            writer = csv.DictWriter(csvfile, fieldnames=field_names)
+
+            if self.first == True:
+                writer.writeheader()
+            writer.writerow({'Time': timestamp, 'No Reg': noreg, 'Nama': nama, 'Umur': umur, 'Suami': suami, 'GPA': gpa, 'Umur Kehamilan': humur_hamil,
+                             'Frekuensi': self.frekuensi, 'Durasi': self.durasi, 'Interval': self.interval, 'Potensi': self.maxPotensi})
+
+            csvfile.close()
+
+
+class editData(QMainWindow):
     def __init__(self):
-        super(screen6, self).__init__()
-        loadUi(DIR+"UI/screen6.ui",self)
-        
-        self.backButton.clicked.connect(self.back_action)
-        self.nextButton.clicked.connect(self.next_action)
-        # self.beforeButton.clicked.connect(self.dataBefore)
-        # self.afterButton.clicked.connect(self.dataAfter)
+        super(editData, self).__init__()
+        loadUi('widget.ui', self)
 
-        ## timer for update threading data
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.thread_update)
-        self.timer.start(300)
+        self.btn_done.clicked.connect(self.close)
 
-    def thread_update(self):
-        global pitch, yaw, roll, distance, tinggiBefore, tinggiAfter
-        
-        self.xValue.setText(f"{pitch:.2f}")
-        self.yValue.setText(f"{roll:.2f}")
-        self.zValue.setText(f"{yaw:.2f}")
-        
-        if self.beforeButton.isChecked():
-            self.beforeButton.setStyleSheet("QPushButton#powerButton:checked {color: white; background-color: rgba(252, 234, 29, 255); }")
-            tinggiBefore = distance
-            self.beforeValue.setText(f"{distance} mm")
-            if ((pitch > -0.5) and (pitch < 0.5)) and ((roll > -0.5) and (roll < 0.5)):
-                self.beforeButton.setChecked(False)
-        else:
-            self.beforeButton.setStyleSheet("QPushButton#powerButton:checked {color: white; background-color: rgba(252, 234, 29, 255); }")
+        self.in_noreg.textChanged.connect(self.noregChanged)
+        self.in_nama.textChanged.connect(self.namaChanged)
+        self.in_umur.textChanged.connect(self.umurChanged)
+        self.in_suami.textChanged.connect(self.suamiChanged)
+        self.in_gpa.textChanged.connect(self.gpaChanged)
+        self.in_umurkehamilan.textChanged.connect(self.umurkehamilanChanged)
 
-        if self.afterButton.isChecked():
-            self.afterButton.setStyleSheet("QPushButton#powerButton:checked {color: white; background-color: rgba(252, 234, 29, 255); }")
-            tinggiAfter = distance
-            self.afterValue.setText(f"{distance} mm")
-            if ((pitch > -0.5) and (pitch < 0.5)) and ((roll > -0.5) and (roll < 0.5)):
-                self.afterButton.setChecked(False)
-        else:
-            self.afterButton.setStyleSheet("QPushButton#powerButton:checked {color: white; background-color: rgba(252, 234, 29, 255); }")
+    def noregChanged(self, text):
+        global noreg
+        noreg = text
 
-    def back_action(self):
-        widget.setCurrentIndex(widget.currentIndex()-3)
+    def namaChanged(self, text):
+        global nama
+        nama = text
 
-    def next_action(self):
-        widget.setCurrentIndex(widget.currentIndex()+1)
+    def umurChanged(self, text):
+        global umur
+        umur = text
 
-class screen7(QDialog):
-    def __init__(self):
-        super(screen7, self).__init__()
-        loadUi(DIR+"UI/screen7.ui",self)
-        self.homeButton.clicked.connect(self.gotoscreen1)
-        self.saveButton.clicked.connect(self.save)
-        self.refresh_btn.clicked.connect(self.show_results)
-        self.backButton.clicked.connect(self.back_action)
-        
-    def show_results(self):
-        global panjang, lebar, tinggi, diameter, \
-               deltaVolume, volumeBefore, volumeAfter, \
-               tinggiBefore, tinggiAfter, tangki
-               
-        if (tangki=='kubus'):
-            volumeBefore = panjang *lebar *abs(tinggi-tinggiBefore) *0.000001
-            volumeAfter = panjang *lebar *abs(tinggi-tinggiAfter) *0.000001
-        elif (tangki=='tabung'):
-            volumeBefore = math.pi *( 0.5 *diameter )**2 *abs(tinggi-tinggiBefore) *0.000001
-            volumeAfter = math.pi *( 0.5 *diameter )**2 *abs(tinggi-tinggiAfter) *0.000001
+    def suamiChanged(self, text):
+        global suami
+        suami = text
 
-        deltaVolume = abs(volumeBefore - volumeAfter)
-        self.VolumeView.setAlignment(Qt.AlignLeft)
-        self.VolumeView.setText(f'{deltaVolume:.2f} L')
+    def gpaChanged(self, text):
+        global gpa
+        gpa = text
 
-    def gotoscreen1(self):
-        sys.stdout.flush()
-        os.execl(sys.executable, 'python3', __file__, *sys.argv[1:])
-
-        # global operator, driver, nopol, panjang, lebar, tinggiAfter, tinggiBefore, volumeAfter, volumeBefore, tangki, diameter
-        # operator = ''
-        # driver = ''
-        # nopol = ''
-        # panjang = 0.00
-        # lebar = 0.00
-        # tinggiBefore = 0.00
-        # tinggiAfter = 0.00
-        # volumeBefore = 0.00
-        # volumeAfter = 0.00
-        # diameter = 0.00
-        # tangki = ''
-
-        # widget.setCurrentIndex(0)
-
-    def save(self):
-        global operator, driver, nopol, volumeBefore, volumeAfter, deltaVolume
-        create_analytics_report(operator, driver, nopol, volumeBefore, volumeAfter, deltaVolume)
-        
-        msg = QMessageBox()
-        msg.setText("Data Saved")
-        msg.setIcon(QMessageBox.Information)
-        x = msg.exec()
-        
-    def back_action(self):
-        widget.setCurrentIndex(widget.currentIndex()-1)
+    def umurkehamilanChanged(self, text):
+        global humur_hamil
+        humur_hamil = text
 
 
-## additional function
-def sensor_read():
-    global accelStr, accelVal, pitch, roll, yaw, distance
-    while True:
-        ## IF USING ADXL345
-        accelStr = str(accelerometer)
-        accelVal = accelStr.split(';')
-        Ax = float(accelVal[0])
-        Ay = float(accelVal[1])
-        Az = float(accelVal[2])
-
-        ## IF USING MPU6050
-        # #Read Accelerometer raw value
-        # acc_x = read_raw_data(accel_bus, device_address, ACCEL_XOUT_H)
-        # acc_y = read_raw_data(accel_bus, device_address, ACCEL_YOUT_H)
-        # acc_z = read_raw_data(accel_bus, device_address, ACCEL_ZOUT_H)
-        # #Full scale range +/- 250 degree/C as per sensitivity scale factor
-        # Ax = acc_x/16384.0
-        # Ay = acc_y/16384.0
-        # Az = acc_z/16384.0
-        
-        ###
-        pitch = math.atan2(Ax, math.sqrt(Ay*Ay + Az*Az)) *180/math.pi
-        roll = math.atan2(Ay, Az) *180/math.pi
-        yaw = math.atan2(Az, math.sqrt(Ax*Ax + Az*Az)) *180/math.pi
-
-        distance = ultrasonic.get_distance()
-
-        sleep(0.3)
-
-        
-
-## main program
 if __name__ == "__main__":
-    os.environ["QT_IM_MODULE"] = "qtvirtualkeyboard"
-
     app = QApplication(sys.argv)
-    QtGui.QGuiApplication.inputMethod().visibleChanged.connect(handleVisibleChanged)
+    window = main()
+    # window.show()
+    window.showFullScreen()
 
-    ## threading
-    writeHandler = Thread(target=sensor_read)
-    writeHandler.setDaemon(True)
-    writeHandler.start()
-
-    widget = QtWidgets.QStackedWidget()
-
-    widget.addWidget(screen1())
-    widget.addWidget(screen2())
-    widget.addWidget(screen3())
-    widget.addWidget(screen4())
-    widget.addWidget(screen5())
-    widget.addWidget(screen6())
-    widget.addWidget(screen7())
-
-    widget.setFixedWidth(1024)
-    widget.setFixedHeight(600)
-    widget.showFullScreen()
-    widget.show()
- 
     sys.exit(app.exec_())
