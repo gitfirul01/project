@@ -15,11 +15,18 @@ from PyQt5.uic import loadUi
 from datetime import datetime
 from random import randrange
 
+noreg = 1
+nama = "nama pasien"
+umur = 30
+suami = "nama suami"
+gpa = "gpa"
+humur_hamil = 8
 
-class mainWindow(QMainWindow):
+
+class main(QMainWindow):
     def __init__(self):
-        super(mainWindow, self).__init__()
-        loadUi('interface.ui', self)
+        super(main, self).__init__()
+        loadUi('main.ui', self)
 
         self.DATE = datetime.now().strftime("%d-%B-%Y, %H_%M_%S")
         # self.PATH = '/home/pi/Desktop/Data/'
@@ -28,13 +35,6 @@ class mainWindow(QMainWindow):
         self.max_val = 30
         self.delayms = 100  # periode pembacaan nilai
         self.first = True
-
-        self.noreg = 1
-        self.nama = "nama pasien"
-        self.umur = 30
-        self.suami = "nama suami"
-        self.gpa = "gpa"
-        self.humur_hamil = 8
 
         # Kontraksi rahim dihitung setiap 10 menit
         self.frekuensi = 0      # berapa kali rahim berkontraksi selama 10 menit
@@ -88,7 +88,16 @@ class mainWindow(QMainWindow):
         self.timer_reset.timeout.connect(self.reset_data)
         self.timer_reset.start()
 
+        self.btn_edit.clicked.connect(self.open_edit_dialog)
+        self.dialogs = list()
+
         self.counter = 0
+
+    def open_edit_dialog(self):
+        dialog = editData()
+        self.dialogs.append(dialog)
+        # dialog.show()
+        dialog.showFullScreen()
 
     def create_lineChart(self):
         # create chart object
@@ -233,11 +242,12 @@ class mainWindow(QMainWindow):
         self.timer_counter.stop()
 
     def save_data(self):
+        global noreg, nama, umur, suami, gpa, humur_hamil
         self.csv_export()
         try:
             url = 'https://uterus.sogydevelop.com/datakirim.php'
-            data = {'noreg': str(self.noreg), 'nama': str(self.nama), 'umur': str(self.umur),
-                    'suami': self.suami, 'gpa': self. gpa, 'umurkehamilan': str(self.humur_hamil),
+            data = {'noreg': str(noreg), 'nama': str(nama), 'umur': str(umur),
+                    'suami': suami, 'gpa': self. gpa, 'umurkehamilan': str(humur_hamil),
                     'frequensi': str(self.frekuensi), 'durasi': str(self.durasi),
                     'intervaldata': str(self.interval), 'potensi': str(self.maxPotensi)}
 
@@ -269,6 +279,7 @@ class mainWindow(QMainWindow):
     #     return (data_now*(smoothing/(1+number))) + (data_prev*(1-(smoothing/(1+number))))
 
     def csv_export(self):
+        global noreg, nama, umur, suami, gpa, humur_hamil
         try:
             with open(self.csv_fileName, newline='') as csvfile:
                 csvfile.close()
@@ -284,16 +295,55 @@ class mainWindow(QMainWindow):
 
             if self.first == True:
                 writer.writeheader()
-            writer.writerow({'Time': timestamp, 'No Reg': self.noreg, 'Nama': self.nama, 'Umur': self.umur, 'Suami': self.suami, 'GPA': self.gpa,
-                             'Umur Kehamilan': self.humur_hamil, 'Frekuensi': self.frekuensi, 'Durasi': self.durasi, 'Interval': self.interval, 'Potensi': self.maxPotensi})
+            writer.writerow({'Time': timestamp, 'No Reg': noreg, 'Nama': nama, 'Umur': umur, 'Suami': suami, 'GPA': gpa, 'Umur Kehamilan': humur_hamil,
+                             'Frekuensi': self.frekuensi, 'Durasi': self.durasi, 'Interval': self.interval, 'Potensi': self.maxPotensi})
 
             csvfile.close()
 
 
+class editData(QMainWindow):
+    def __init__(self):
+        super(editData, self).__init__()
+        loadUi('widget.ui', self)
+
+        self.btn_done.clicked.connect(self.close)
+
+        self.in_noreg.textChanged.connect(self.noregChanged)
+        self.in_nama.textChanged.connect(self.namaChanged)
+        self.in_umur.textChanged.connect(self.umurChanged)
+        self.in_suami.textChanged.connect(self.suamiChanged)
+        self.in_gpa.textChanged.connect(self.gpaChanged)
+        self.in_umurkehamilan.textChanged.connect(self.umurkehamilanChanged)
+
+    def noregChanged(self, text):
+        global noreg
+        noreg = text
+
+    def namaChanged(self, text):
+        global nama
+        nama = text
+
+    def umurChanged(self, text):
+        global umur
+        umur = text
+
+    def suamiChanged(self, text):
+        global suami
+        suami = text
+
+    def gpaChanged(self, text):
+        global gpa
+        gpa = text
+
+    def umurkehamilanChanged(self, text):
+        global humur_hamil
+        humur_hamil = text
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = mainWindow()
-    window.show()
+    window = main()
+    # window.show()
     window.showFullScreen()
 
     sys.exit(app.exec_())
