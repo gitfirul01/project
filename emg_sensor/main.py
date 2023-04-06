@@ -1,21 +1,33 @@
-import sys, serial, requests
+import sys
+import serial
+import requests
+import csv
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout#, QWidget, QHBoxLayout, QLabel 
+# , QWidget, QHBoxLayout, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout
 from PyQt5.QtGui import QPainter
-from PyQt5.QtCore import QTimer#, Qt
+from PyQt5.QtCore import QTimer  # , Qt
 from PyQt5.QtChart import QChart, QChartView, QLineSeries
 from PyQt5.uic import loadUi
 # from threading import Thread, Timer
 # from time import sleep, time
 
+from datetime import datetime
 from random import randrange
+
 
 class mainWindow(QMainWindow):
     def __init__(self):
         super(mainWindow, self).__init__()
         loadUi('interface.ui', self)
 
+        self.DATE = datetime.now().strftime("%d-%B-%Y, %H_%M_%S")
+        # self.PATH = '/home/pi/Desktop/Data/'
+        self.PATH = './'
+        self.csv_fileName = self.PATH + 'EMG-Data-Report-' + self.DATE + '.csv'
         self.max_val = 30
+        self.delayms = 100  # periode pembacaan nilai
+        self.first = True
 
         self.noreg = 1
         self.nama = "nama pasien"
@@ -24,32 +36,31 @@ class mainWindow(QMainWindow):
         self.gpa = "gpa"
         self.humur_hamil = 8
 
-        ## Kontraksi rahim dihitung setiap 10 menit
-        self.frequency = 0      # berapa kali rahim berkontraksi selama 10 menit
-        self.duration = 0       # berapa detik rahim berkontraksi setiap kali dia berkontraksi
-        self.interval = 0       # berapa detik rahim beristirahat (jeda) sebelum berkontraksi kembali    
-        self.actPotential = 0   # kekuatan litrik rahim saat berkontraksi
-        self.maxPotential = 0 
+        # Kontraksi rahim dihitung setiap 10 menit
+        self.frekuensi = 0      # berapa kali rahim berkontraksi selama 10 menit
+        self.durasi = 0       # berapa detik rahim berkontraksi setiap kali dia berkontraksi
+        # berapa detik rahim beristirahat (jeda) sebelum berkontraksi kembali
+        self.interval = 0
+        self.actPotensi = 0   # kekuatan litrik rahim saat berkontraksi
+        self.maxPotensi = 0
 
-        self.prev_duration = 0      # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_durasi = 0      # variabel EMA untuk menampung nilai sebelumnya
         self.prev_interval = 0      # variabel EMA untuk menampung nilai sebelumnya
-        self.prev_actPotential = 0  # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_actPotensi = 0  # variabel EMA untuk menampung nilai sebelumnya
 
-        self.potential_threshold = 120   # batas atas potensi aksi untuk deteksi kontraksi, 120 adalah ujicoba menggunakan otot lengan
+        # batas atas potensi aksi untuk deteksi kontraksi, 120 adalah ujicoba menggunakan otot lengan
+        self.potential_threshold = 12.0
 
         self.countI = 0
         self.countD = 0
         self.levelD = 0
 
-        self.countInterval = 0  # variabel untuk menampung nilai lamanya interval
-        self.countDuration = 0  # variabel untuk menampung nilai lamanya durasi
-
-        self.delayms = 100  # periode pembacaan nilai
+        self.time_count = 0  # variabel untuk menampung nilai lamanya waktu interval dan durasi
 
         try:
             self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
         except:
-            print("Serial port tidak terdeteksi")
+            print("Gagal membuka serial port. Generate data random . . .")
 
         self.create_lineChart()
 
@@ -62,50 +73,42 @@ class mainWindow(QMainWindow):
         self.timer_read_data.timeout.connect(self.read_data)
         self.timer_read_data.start()
 
-        self.timer_duration = QTimer()
-        self.timer_duration.setInterval(self.delayms) # ms
-        self.timer_duration.timeout.connect(self.hitung_durasi)
-        self.timer_duration.stop()
-
-        self.timer_interval = QTimer()
-        self.timer_interval.setInterval(self.delayms) # ms
-        self.timer_interval.timeout.connect(self.hitung_interval)
-        self.timer_interval.stop()
+        self.timer_counter = QTimer()
+        self.timer_counter.setInterval(self.delayms)  # ms
+        self.timer_counter.timeout.connect(self.time_counter)
+        self.timer_counter.stop()
 
         self.timer_send_web = QTimer()
-        self.timer_send_web.setInterval(3000) # ms
-        self.timer_send_web.timeout.connect(self.kirim_web)
+        self.timer_send_web.setInterval(3000)  # ms
+        self.timer_send_web.timeout.connect(self.save_data)
         self.timer_send_web.start()
-        
+
         self.timer_reset = QTimer()
-        self.timer_reset.setInterval(600000) # ms
+        self.timer_reset.setInterval(600000)  # ms
         self.timer_reset.timeout.connect(self.reset_data)
         self.timer_reset.start()
 
         self.counter = 0
 
-
     def create_lineChart(self):
-        ## create chart object
+        # create chart object
         self.chart = QChart()
         self.chart.setAnimationOptions(QChart.SeriesAnimations)
         # self.chart.setTitle("Electrical Signal")
-        
 
         self.chart_view = QChartView(self.chart)
-        self.chart_view.setRenderHint(QPainter.Antialiasing)        
+        self.chart_view.setRenderHint(QPainter.Antialiasing)
 
-        ## create blank widget to store the graphic
-        ## we do not do this because we have had chart_widget in .ui file
-        ## so we just need to connect that
+        # create blank widget to store the graphic
+        # we do not do this because we have had chart_widget in .ui file
+        # so we just need to connect that
         # chart_widget = QWidget(self)
         # self.setCentralWidget(chart_widget)
 
-        ## add the widget to chart_layout
+        # add the widget to chart_layout
         chart_layout = QVBoxLayout(self.chart_widget)
-        ## add chart_view widged to chart_layout
+        # add chart_view widged to chart_layout
         chart_layout.addWidget(self.chart_view)
-
 
         self.series = QLineSeries()
         self.chart.addSeries(self.series)
@@ -120,139 +123,137 @@ class mainWindow(QMainWindow):
         # self.chart.legend().setAlignment(Qt.AlignBottom)
         # self.chart.legend().markers(self.series)[0].setLabel("Electrical Signal (mV)")
 
-
-    def read_data(self): 
+    def read_data(self):
         x = 0.07*(1000/self.delayms)  # counter untuk deteksi        (0,07s)
         y = 1*(1000/self.delayms)     # counter untuk tidak deteksi  (1s)
         z = 2*(1000/self.delayms)     # counter untuk reset deteksi  (2s)
-            
+
         try:
             try:
                 data = float(self.serial_port.readline().decode().strip())
             except:
-                print("gagal membaca data dari serial")
                 data = randrange(0, 200)
 
-            ## filter nilai potensi aksi
-            self.actPotential = self.ema(data, self.prev_actPotential, 0.5)
-            self.actPotential = round(float(self.actPotential), 2)
-            self.prev_actPotential = self.actPotential
+            # filter nilai potensi aksi
+            self.actPotensi = self.ema(data, self.prev_actPotensi, 0.5)
+            self.actPotensi = round(float(self.actPotensi), 2)
+            self.prev_actPotensi = self.actPotensi
 
-            self.series.append(self.counter, self.actPotential)
+            self.series.append(self.counter, self.actPotensi)
 
-            ## jika terdeteksi sinyal melebihi treshold
-            if self.actPotential > self.potential_threshold:
+            # jika terdeteksi sinyal melebihi treshold
+            if self.actPotensi > self.potential_threshold:
                 self.countI += 1
                 self.countD = 0
-                self.maxPotential = self.actPotential
-            ## jika tidak terdeteksi sinyal melebihi treshold
-            elif self.actPotential < self.potential_threshold: 
-                self.countD += 1 
-                if self.actPotential > self.maxPotential:
-                    self.maxPotential = self.actPotential
-            
-            ## jika terdeteksi kontraksi (jumlah sinyal melebihi angka tertentu dan level deteksi = 0)
+                self.maxPotensi = self.actPotensi
+            # jika tidak terdeteksi sinyal melebihi treshold
+            elif self.actPotensi < self.potential_threshold:
+                self.countD += 1
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
+
+            # jika terdeteksi kontraksi (jumlah sinyal melebihi angka tertentu dan level deteksi = 0)
             if self.countI > x and self.levelD == 0:
-                self.frequency += 1
-                ## update max potential
-                if self.actPotential > self.maxPotential:
-                    self.maxPotential = self.actPotential
-                ## hitung interval
-                self.timer_interval.stop()
-                self.interval = self.countInterval/(1000/self.delayms)     # convert milisecond of countInterval to second (1 s = 10 * 100 ms)
-                self.interval = self.ema(self.interval, self.prev_interval, 0.5)
-                self.interval = round(float(self.interval), 2)
+                self.frekuensi += 1
+                # update max potential
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
+                # hitung interval
+                self.timer_counter.stop()
+                # convert milisecond of time_count to second (1 s = 10 * 100 ms)
+                self.interval = round(float(
+                    self.ema(self.time_count/(1000/self.delayms),
+                             self.prev_interval, 0.5)),
+                    2)
                 self.prev_interval = self.interval
-                ## inisialisasi timer durasi kontraksi
-                self.countDuration = 0
-                self.timer_duration.start()
-                ## ubah level deteksi = 1
+                # inisialisasi timer durasi kontraksi
+                self.time_count = 0
+                self.timer_counter.start()
+                # ubah level deteksi = 1
                 self.countD = 0
                 self.levelD = 1
-            ## jika tidak terdeteksi kontraksi lagi dalam 1 detik
+            # jika tidak terdeteksi kontraksi lagi dalam 1 detik
             elif self.countD > y and self.levelD == 1:
-                ## update max potential
-                if self.actPotential > self.maxPotential:
-                    self.maxPotential = self.actPotential
-                ## hitung durasi
-                self.timer_duration.stop()
-                self.duration = self.countDuration/(1000/self.delayms)     # convert milisecond of countDuration to second (1 s = 10 * 100 ms)
-                self.duration = self.ema(self.duration, self.prev_duration, 0.5)
-                self.duration = round(float(self.duration), 2)
-                self.prev_duration = self.duration
-                ## inisialisasi timer interval kontraksi
-                self.countInterval = 0
-                self.timer_interval.start()
-                ## ubah level deteksi = 0
+                # update max potential
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
+                # hitung durasi
+                self.timer_counter.stop()
+                # convert milisecond of time_count to second (1 s = 10 * 100 ms)
+                self.durasi = round(float(
+                    self.ema(self.time_count/(1000/self.delayms),
+                             self.prev_interval, 0.5)),
+                    2)
+                self.prev_durasi = self.durasi
+                # inisialisasi timer interval kontraksi
+                self.time_count = 0
+                self.timer_counter.start()
+                # ubah level deteksi = 0
                 self.countI = 0
                 self.levelD = 0
-            ## jika tidak terdeteksi kontraksi lagi dalam 2 detik
+            # jika tidak terdeteksi kontraksi lagi dalam 2 detik
             elif self.countD > z:
-                if self.actPotential > self.maxPotential: 
-                    self.maxPotential = self.actPotential 
+                if self.actPotensi > self.maxPotensi:
+                    self.maxPotensi = self.actPotensi
                 self.countD = 0
-                self.countI = 0 
+                self.countI = 0
 
-            ## tampilkan nilai pada GUI
-            self.var_frequency.setText(f"{self.frequency}")
-            self.var_duration.setText(f"{self.duration}")
+            # tampilkan nilai pada GUI
+            self.var_frequency.setText(f"{self.frekuensi}")
+            self.var_duration.setText(f"{self.durasi}")
             self.var_interval.setText(f"{self.interval}")
-            self.var_maxPotent.setText(f"{self.maxPotential}")
-            self.var_actPotent.setText(f"{self.actPotential}")
+            self.var_maxPotent.setText(f"{self.maxPotensi}")
+            self.var_actPotent.setText(f"{self.actPotensi}")
 
             self.counter += 1
- 
 
             if len(self.series) > 100:
                 # self.series.removePoints(0, 1)
                 self.chart.axisX().setRange(self.counter - 100, self.counter)
-            if self.actPotential > self.max_val:
-                self.max_val = self.actPotential
+            if self.actPotensi > self.max_val:
+                self.max_val = self.actPotensi
                 self.chart.axisY().setRange(0, 3*self.max_val)
             # self.chart.axisY().setRange(0, 5000)
- 
+
             self.chart_view.repaint()
 
         except ValueError:
             pass
-    
-    def hitung_durasi(self): 
-        self.countDuration += 1 
 
-    def hitung_interval(self): 
-        self.countInterval += 1
+    def time_counter(self):
+        self.time_count += 1
 
     def reset_data(self):
-        self.frequency = 0
-        self.duration = 0
+        self.frekuensi = 0
+        self.durasi = 0
         self.interval = 0
         self.countD = 0
         self.countI = 0
         self.levelD = 0
-        self.timer_duration.stop()
-        self.timer_interval.stop()
-    
-    def kirim_web(self):
-        url = 'https://uterus.sogydevelop.com/datakirim.php'
- 
-        data = {'noreg': str(self.noreg), 'nama': str(self.nama),'umur' : str(self.umur), 
-                'suami': self.suami,'gpa':self. gpa, 'umurkehamilan' : str(self.humur_hamil), 
-                'frequensi': str(self.frequency), 'durasi': str(self.duration),
-                'intervaldata': str(self.interval), 'potensi': str(self.maxPotential)}
-        
-        try:
-            response = requests.post(url, data=data, auth=('admin12345', '12345678'), timeout=2)
-        except:
-            pass
+        self.timer_counter.stop()
 
-        if response.status_code == 200: 
-            print('Data berhasil dikirim ke server')
-        else: 
+    def save_data(self):
+        self.csv_export()
+        try:
+            url = 'https://uterus.sogydevelop.com/datakirim.php'
+            data = {'noreg': str(self.noreg), 'nama': str(self.nama), 'umur': str(self.umur),
+                    'suami': self.suami, 'gpa': self. gpa, 'umurkehamilan': str(self.humur_hamil),
+                    'frequensi': str(self.frekuensi), 'durasi': str(self.durasi),
+                    'intervaldata': str(self.interval), 'potensi': str(self.maxPotensi)}
+
+            response = requests.post(url, data=data, auth=(
+                'admin12345', '12345678'), timeout=2)
+
+            if response.status_code == 200:
+                print('Data berhasil dikirim ke server')
+            else:
+                print('Terjadi kesalahan dalam mengirim data ke server')
+        except:
             print('Terjadi kesalahan dalam mengirim data ke server')
 
     def closeEvent(self, event):
         try:
-            self.serial_port.close() 
+            self.serial_port.close()
         except:
             pass
         # super().closeEvent(event)
@@ -260,14 +261,35 @@ class mainWindow(QMainWindow):
     def ema(self, data_now, data_prev, alfa):
         # https://www.investopedia.com/terms/m/movingaverage.asp
         return (data_now*alfa) + (data_prev*(1-alfa))
-    
+
     # def ema(self, data_now, data_prev):
     #     # https://www.investopedia.com/terms/m/movingaverage.asp
     #     smoothing = 1.5
     #     number = 2
     #     return (data_now*(smoothing/(1+number))) + (data_prev*(1-(smoothing/(1+number))))
 
-    
+    def csv_export(self):
+        try:
+            with open(self.csv_fileName, newline='') as csvfile:
+                csvfile.close()
+            self.first = False
+        except:
+            self.first = True
+
+        with open(self.csv_fileName, 'a', newline='') as csvfile:
+            timestamp = datetime.now().strftime("%d-%B-%Y %H:%M:%S")
+            field_names = ['Time', 'No Reg', 'Nama', 'Umur', 'Suami', 'GPA',
+                           'Umur Kehamilan', 'Frekuensi', 'Durasi', 'Interval', 'Potensi']
+            writer = csv.DictWriter(csvfile, fieldnames=field_names)
+
+            if self.first == True:
+                writer.writeheader()
+            writer.writerow({'Time': timestamp, 'No Reg': self.noreg, 'Nama': self.nama, 'Umur': self.umur, 'Suami': self.suami, 'GPA': self.gpa,
+                             'Umur Kehamilan': self.humur_hamil, 'Frekuensi': self.frekuensi, 'Durasi': self.durasi, 'Interval': self.interval, 'Potensi': self.maxPotensi})
+
+            csvfile.close()
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = mainWindow()
