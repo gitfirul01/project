@@ -96,8 +96,8 @@ class main(QMainWindow):
             print("Berhasil membuka serial port")
             self.console.setText((f"Berhasil membuka serial port"))
         except:
-            print("Gagal membuka serial port, generate data random")
-            self.console.setText((f"Gagal membuka serial port, generate data random"))
+            print("Gagal membuka serial port")
+            self.console.setText((f"Gagal membuka serial port"))
 
     def open_edit_dialog(self):
         dialog = editData()
@@ -148,6 +148,8 @@ class main(QMainWindow):
                 data = float(self.serial_port.readline().decode().strip())
             except:
                 data = randrange(0, 20)
+                print("Gagal mengambil data serial, generate data random")
+                self.console.setText((f"Gagal mengambil data serial, generate data random"))
                 
             # filter nilai potensi aksi
             self.actPotensi = self.ema(data, self.prev_actPotensi, 0.5)
