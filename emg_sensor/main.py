@@ -15,12 +15,13 @@ from PyQt5.uic import loadUi
 from datetime import datetime
 from random import randrange
 
-noreg = 1
+
+noreg = 0
 nama = "nama pasien"
-umur = 30
+umur = 0
 suami = "nama suami"
 gpa = "gpa"
-humur_hamil = 8
+humur_hamil = 0
 
 
 class main(QMainWindow):
@@ -28,6 +29,7 @@ class main(QMainWindow):
         super(main, self).__init__()
         loadUi('main.ui', self)
 
+        #--- Variabel konfigurasi ---#
         self.DATE = datetime.now().strftime("%d-%B-%Y, %H_%M_%S")
         # self.PATH = '/home/pi/Desktop/Data/'
         self.PATH = './'
@@ -36,37 +38,36 @@ class main(QMainWindow):
         self.delayms = 100  # periode pembacaan nilai
         self.first = True
 
-        # Kontraksi rahim dihitung setiap 10 menit
+        #--- Variabel kontraksi rahim dihitung setiap 10 menit ---#
         self.frekuensi = 0      # berapa kali rahim berkontraksi selama 10 menit
-        self.durasi = 0       # berapa detik rahim berkontraksi setiap kali dia berkontraksi
-        # berapa detik rahim beristirahat (jeda) sebelum berkontraksi kembali
-        self.interval = 0
-        self.actPotensi = 0   # kekuatan litrik rahim saat berkontraksi
+        self.durasi = 0         # berapa detik rahim berkontraksi setiap kali dia berkontraksi
+        self.interval = 0       # berapa detik rahim beristirahat (jeda) sebelum berkontraksi kembali
+        self.actPotensi = 0     # kekuatan litrik rahim saat berkontraksi
         self.maxPotensi = 0
 
-        self.prev_durasi = 0      # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_durasi = 0        # variabel EMA untuk menampung nilai sebelumnya
         self.prev_interval = 0      # variabel EMA untuk menampung nilai sebelumnya
-        self.prev_actPotensi = 0  # variabel EMA untuk menampung nilai sebelumnya
+        self.prev_actPotensi = 0    # variabel EMA untuk menampung nilai sebelumnya
 
-        # batas atas potensi aksi untuk deteksi kontraksi, 120 adalah ujicoba menggunakan otot lengan
-        self.potential_threshold = 12.0
+        self.potential_threshold = 12.0 # batas atas potensi aksi untuk deteksi kontraksi
 
         self.countI = 0
         self.countD = 0
         self.levelD = 0
 
         self.time_count = 0  # variabel untuk menampung nilai lamanya waktu interval dan durasi
+        self.counter = 0     # counter siklus pengukuran (x-axis grafik)
 
-        try:
-            self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
-        except:
-            print("Gagal membuka serial port. Generate data random . . .")
-
+        #--- Inisialisasi fungsi ---#
+        self.open_serial()
         self.create_lineChart()
 
         self.btn_red.clicked.connect(self.close)
         self.btn_yellow.clicked.connect(self.showNormal)
         self.btn_green.clicked.connect(self.showFullScreen)
+        self.btn_reset.clicked.connect(self.reset_data)
+        self.btn_edit.clicked.connect(self.open_edit_dialog)
+        self.dialogs = list()
 
         self.timer_read_data = QTimer()
         self.timer_read_data.setInterval(self.delayms)  # ms
@@ -88,10 +89,15 @@ class main(QMainWindow):
         self.timer_reset.timeout.connect(self.reset_data)
         self.timer_reset.start()
 
-        self.btn_edit.clicked.connect(self.open_edit_dialog)
-        self.dialogs = list()
 
-        self.counter = 0
+    def open_serial(self):
+        try:
+            self.serial_port = serial.Serial("/dev/ttyUSB0", 9600)
+            print("Berhasil membuka serial port")
+            self.console.setText((f"Berhasil membuka serial port"))
+        except:
+            print("Gagal membuka serial port, generate data random")
+            self.console.setText((f"Gagal membuka serial port, generate data random"))
 
     def open_edit_dialog(self):
         dialog = editData()
@@ -141,8 +147,8 @@ class main(QMainWindow):
             try:
                 data = float(self.serial_port.readline().decode().strip())
             except:
-                data = randrange(0, 200)
-
+                data = randrange(0, 20)
+                
             # filter nilai potensi aksi
             self.actPotensi = self.ema(data, self.prev_actPotensi, 0.5)
             self.actPotensi = round(float(self.actPotensi), 2)
@@ -214,6 +220,11 @@ class main(QMainWindow):
             self.var_maxPotent.setText(f"{self.maxPotensi}")
             self.var_actPotent.setText(f"{self.actPotensi}")
 
+            global noreg, nama, umur
+            self.label_noreg.setText(f"{noreg}")
+            self.label_nama.setText(f"{nama}")
+            self.label_umur.setText(f"{umur}")
+
             self.counter += 1
 
             if len(self.series) > 100:
@@ -233,12 +244,16 @@ class main(QMainWindow):
         self.time_count += 1
 
     def reset_data(self):
+        print("Data reset")
+        self.console.setText((f"Data reset"))
+
         self.frekuensi = 0
         self.durasi = 0
         self.interval = 0
         self.countD = 0
         self.countI = 0
         self.levelD = 0
+
         self.timer_counter.stop()
 
     def save_data(self):
@@ -251,15 +266,19 @@ class main(QMainWindow):
                     'frequensi': str(self.frekuensi), 'durasi': str(self.durasi),
                     'intervaldata': str(self.interval), 'potensi': str(self.maxPotensi)}
 
-            response = requests.post(url, data=data, auth=(
-                'admin12345', '12345678'), timeout=2)
+            response = requests.post(url, data=data, auth=('admin12345', '12345678'), timeout=2)
 
             if response.status_code == 200:
                 print('Data berhasil dikirim ke server')
+                self.console.setText((f"Data berhasil dikirim ke server"))
             else:
                 print('Terjadi kesalahan dalam mengirim data ke server')
+                self.console.setText(
+                    (f"Terjadi kesalahan dalam mengirim data ke server"))
         except:
             print('Terjadi kesalahan dalam mengirim data ke server')
+            self.console.setText(
+                (f"Terjadi kesalahan dalam mengirim data ke server"))
 
     def closeEvent(self, event):
         try:
@@ -271,12 +290,6 @@ class main(QMainWindow):
     def ema(self, data_now, data_prev, alfa):
         # https://www.investopedia.com/terms/m/movingaverage.asp
         return (data_now*alfa) + (data_prev*(1-alfa))
-
-    # def ema(self, data_now, data_prev):
-    #     # https://www.investopedia.com/terms/m/movingaverage.asp
-    #     smoothing = 1.5
-    #     number = 2
-    #     return (data_now*(smoothing/(1+number))) + (data_prev*(1-(smoothing/(1+number))))
 
     def csv_export(self):
         global noreg, nama, umur, suami, gpa, humur_hamil
@@ -297,7 +310,6 @@ class main(QMainWindow):
                 writer.writeheader()
             writer.writerow({'Time': timestamp, 'No Reg': noreg, 'Nama': nama, 'Umur': umur, 'Suami': suami, 'GPA': gpa, 'Umur Kehamilan': humur_hamil,
                              'Frekuensi': self.frekuensi, 'Durasi': self.durasi, 'Interval': self.interval, 'Potensi': self.maxPotensi})
-
             csvfile.close()
 
 
@@ -318,23 +330,18 @@ class editData(QMainWindow):
     def noregChanged(self, text):
         global noreg
         noreg = text
-
     def namaChanged(self, text):
         global nama
         nama = text
-
     def umurChanged(self, text):
         global umur
         umur = text
-
     def suamiChanged(self, text):
         global suami
         suami = text
-
     def gpaChanged(self, text):
         global gpa
         gpa = text
-
     def umurkehamilanChanged(self, text):
         global humur_hamil
         humur_hamil = text
