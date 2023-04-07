@@ -681,7 +681,7 @@ color: rgb(255, 255, 255);</string>
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>125</width>
+                    <width>130</width>
                     <height>16777215</height>
                    </size>
                   </property>
