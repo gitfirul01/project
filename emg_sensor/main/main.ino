@@ -20,7 +20,7 @@ void loop() {
   // Serial.println(raw);
   Serial.println(vol);
 
-  delay(100);
+  delay(10);
 }
 
 // void ema(float* now, float* prev, float alpha) {
